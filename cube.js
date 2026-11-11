@@ -273,6 +273,16 @@ class RubiksCube3D {
       inner: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.body), roughness: 0.85, metalness: 0.02 })
     };
 
+    // Solid materials for polygon shape-mods (Fisher Cube) to prevent UV stretch
+    this.solidMaterials = {
+      R: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.R), roughness: rough, metalness: metal, side: THREE.DoubleSide }),
+      L: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.L), roughness: rough, metalness: metal, side: THREE.DoubleSide }),
+      U: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.U), roughness: rough, metalness: metal, side: THREE.DoubleSide }),
+      D: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.D), roughness: rough, metalness: metal, side: THREE.DoubleSide }),
+      F: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.F), roughness: rough, metalness: metal, side: THREE.DoubleSide }),
+      B: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.B), roughness: rough, metalness: metal, side: THREE.DoubleSide })
+    };
+
     // Mirror Cube Brushed Metallic Material
     this.materials.mirror = new THREE.MeshStandardMaterial({
       color: 0xdde2ea,
@@ -432,90 +442,65 @@ class RubiksCube3D {
 
   /**
    * Builds the Fisher Cube (Tony Fisher's 45° vertical shape-mod)
+   * A mathematically exact, fully articulated 3x3 shape mod where outer
+   * vertical faces are rotated 45° relative to the internal 3x3 cuts.
    */
   buildFisherCube() {
     this.size = 3;
-    const L = 1.5 * Math.SQRT2; // ~2.1213
-    const h = 0.5;
+    const L = 1.5 * Math.SQRT2; // ~2.12132
 
-    // Build the 9 XZ-plane 2D polygon cross sections
-    const getPolygonForCell = (i, k) => {
-      const shape = new THREE.Shape();
-
-      if (i === 0 && k === 0) {
-        // Center: square
-        shape.moveTo(-h, -h);
-        shape.lineTo(h, -h);
-        shape.lineTo(h, h);
-        shape.lineTo(-h, h);
-        shape.closePath();
-      } else if (i === 1 && k === 0) {
-        // Right edge (pentagon corner pointing along +X)
-        shape.moveTo(h, -h);
-        shape.lineTo(h, h);
-        shape.lineTo(L - h, h);
-        shape.lineTo(L, 0);
-        shape.lineTo(L - h, -h);
-        shape.closePath();
-      } else if (i === -1 && k === 0) {
-        // Left edge (pentagon corner pointing along -X)
-        shape.moveTo(-h, h);
-        shape.lineTo(-h, -h);
-        shape.lineTo(-L + h, -h);
-        shape.lineTo(-L, 0);
-        shape.lineTo(-L + h, h);
-        shape.closePath();
-      } else if (i === 0 && k === 1) {
-        // Front edge (pentagon corner pointing along +Z)
-        shape.moveTo(-h, h);
-        shape.lineTo(h, h);
-        shape.lineTo(h, L - h);
-        shape.lineTo(0, L);
-        shape.lineTo(-h, L - h);
-        shape.closePath();
-      } else if (i === 0 && k === -1) {
-        // Back edge (pentagon corner pointing along -Z)
-        shape.moveTo(h, -h);
-        shape.lineTo(-h, -h);
-        shape.lineTo(-h, -L + h);
-        shape.lineTo(0, -L);
-        shape.lineTo(h, -L + h);
-        shape.closePath();
-      } else if (i === 1 && k === 1) {
-        // Corner (1, 1): right triangle with flat diagonal exterior
-        shape.moveTo(h, h);
-        shape.lineTo(L - h, h);
-        shape.lineTo(h, L - h);
-        shape.closePath();
-      } else if (i === -1 && k === 1) {
-        // Corner (-1, 1)
-        shape.moveTo(-h, h);
-        shape.lineTo(-h, L - h);
-        shape.lineTo(-L + h, h);
-        shape.closePath();
-      } else if (i === -1 && k === -1) {
-        // Corner (-1, -1)
-        shape.moveTo(-h, -h);
-        shape.lineTo(-L + h, -h);
-        shape.lineTo(-h, -L + h);
-        shape.closePath();
-      } else if (i === 1 && k === -1) {
-        // Corner (1, -1)
-        shape.moveTo(h, -h);
-        shape.lineTo(h, -L + h);
-        shape.lineTo(L - h, -h);
-        shape.closePath();
+    const getFisherCellPolygon = (x0, z0) => {
+      if (x0 === 0 && z0 === 0) {
+        return [[-0.48, -0.48], [0.48, -0.48], [0.48, 0.48], [-0.48, 0.48]];
       }
-      return shape;
+      if (x0 === 1 && z0 === 0) {
+        return [[-0.5, -0.5], [-0.5, 0.5], [L - 1.5, 0.5], [L - 1.0, 0], [L - 1.5, -0.5]];
+      }
+      if (x0 === -1 && z0 === 0) {
+        return [[0.5, 0.5], [0.5, -0.5], [-(L - 1.5), -0.5], [-(L - 1.0), 0], [-(L - 1.5), 0.5]];
+      }
+      if (x0 === 0 && z0 === 1) {
+        return [[-0.5, -0.5], [0.5, -0.5], [0.5, L - 1.5], [0, L - 1.0], [-0.5, L - 1.5]];
+      }
+      if (x0 === 0 && z0 === -1) {
+        return [[0.5, 0.5], [-0.5, 0.5], [-0.5, -(L - 1.5)], [0, -(L - 1.0)], [0.5, -(L - 1.5)]];
+      }
+      if (x0 === 1 && z0 === 1) {
+        return [[-0.5, -0.5], [L - 1.5, -0.5], [-0.5, L - 1.5]];
+      }
+      if (x0 === -1 && z0 === 1) {
+        return [[0.5, -0.5], [0.5, L - 1.5], [-(L - 1.5), -0.5]];
+      }
+      if (x0 === -1 && z0 === -1) {
+        return [[0.5, 0.5], [-(L - 1.5), 0.5], [0.5, -(L - 1.5)]];
+      }
+      if (x0 === 1 && z0 === -1) {
+        return [[-0.5, 0.5], [-0.5, -(L - 1.5)], [L - 1.5, 0.5]];
+      }
+      return [];
     };
 
-    const extrudeSettings = {
-      depth: 0.96,
-      bevelEnabled: true,
-      bevelSegments: 2,
-      steps: 1,
-      bevelSize: 0.02,
-      bevelThickness: 0.02
+    const createPolygonShape = (pts, inset = 0) => {
+      const shape = new THREE.Shape();
+      if (pts.length < 3) return shape;
+      if (inset === 0) {
+        shape.moveTo(pts[0][0], -pts[0][1]);
+        for (let i = 1; i < pts.length; i++) {
+          shape.lineTo(pts[i][0], -pts[i][1]);
+        }
+        shape.closePath();
+        return shape;
+      }
+      let cx = 0, cz = 0;
+      for (const p of pts) { cx += p[0]; cz += p[1]; }
+      cx /= pts.length; cz /= pts.length;
+      const scale = Math.max(0.6, 1 - inset);
+      shape.moveTo(cx + (pts[0][0] - cx) * scale, -(cz + (pts[0][1] - cz) * scale));
+      for (let i = 1; i < pts.length; i++) {
+        shape.lineTo(cx + (pts[i][0] - cx) * scale, -(cz + (pts[i][1] - cz) * scale));
+      }
+      shape.closePath();
+      return shape;
     };
 
     for (let x = -1; x <= 1; x++) {
@@ -524,34 +509,120 @@ class RubiksCube3D {
           const isExterior = (x !== 0 || y !== 0 || z !== 0);
           if (!isExterior) continue;
 
-          const polyShape = getPolygonForCell(x, z);
-          const geo = new THREE.ExtrudeGeometry(polyShape, extrudeSettings);
-          // Rotate extrusion to align depth with Y axis
-          geo.center();
+          const group = new THREE.Group();
+          const pts = getFisherCellPolygon(x, z);
 
-          // Appropriate materials for top/bottom vs sides
-          const mats = [
-            (y === 1) ? this.materials.U : (y === -1 ? this.materials.D : this.materials.inner),
-            (x === 1) ? this.materials.R : (x === -1 ? this.materials.L : (z === 1 ? this.materials.F : this.materials.B))
-          ];
+          // 1. Black speedcube body
+          const bodyShape = createPolygonShape(pts, 0);
+          const extrudeSettings = {
+            depth: 0.96,
+            bevelEnabled: true,
+            bevelSegments: 2,
+            steps: 1,
+            bevelSize: 0.02,
+            bevelThickness: 0.02
+          };
+          const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, extrudeSettings);
+          bodyGeo.translate(0, 0, -0.48);
+          bodyGeo.rotateX(-Math.PI / 2);
 
-          const cubie = new THREE.Mesh(geo, mats);
-          cubie.castShadow = true;
-          cubie.receiveShadow = true;
+          const bodyMesh = new THREE.Mesh(bodyGeo, this.materials.inner);
+          bodyMesh.castShadow = true;
+          bodyMesh.receiveShadow = true;
+          group.add(bodyMesh);
 
-          // Position at y layer
-          cubie.position.set(0, y * 1.0, 0);
-          cubie.userData = { initialX: x + 1, initialY: y + 1, initialZ: z + 1, isFisher: true };
+          // 2. Top sticker (U face) if y === 1
+          if (y === 1) {
+            const topShape = createPolygonShape(pts, 0.08);
+            const topGeo = new THREE.ShapeGeometry(topShape);
+            topGeo.rotateX(-Math.PI / 2);
+            topGeo.translate(0, 0.49, 0);
+            const topMesh = new THREE.Mesh(topGeo, this.solidMaterials.U);
+            group.add(topMesh);
+          }
 
-          this.cubeGroup.add(cubie);
-          this.cubies.push(cubie);
+          // 3. Bottom sticker (D face) if y === -1
+          if (y === -1) {
+            const botShape = createPolygonShape(pts, 0.08);
+            const botGeo = new THREE.ShapeGeometry(botShape);
+            botGeo.rotateX(Math.PI / 2);
+            botGeo.translate(0, -0.49, 0);
+            const botMesh = new THREE.Mesh(botGeo, this.solidMaterials.D);
+            group.add(botMesh);
+          }
+
+          // 4. Exterior vertical wall stickers
+          for (let i = 0; i < pts.length; i++) {
+            const p1 = pts[i];
+            const p2 = pts[(i + 1) % pts.length];
+            const mx = x + (p1[0] + p2[0]) / 2;
+            const mz = z + (p1[1] + p2[1]) / 2;
+
+            let faceMat = null;
+            let normal = null;
+            if (Math.abs(mx + mz - L) < 0.02) {
+              faceMat = this.solidMaterials.F; // Front-Right
+              normal = [1 / Math.SQRT2, 1 / Math.SQRT2];
+            } else if (Math.abs(mx - mz - L) < 0.02) {
+              faceMat = this.solidMaterials.R; // Back-Right
+              normal = [1 / Math.SQRT2, -1 / Math.SQRT2];
+            } else if (Math.abs(-mx - mz - L) < 0.02) {
+              faceMat = this.solidMaterials.B; // Back-Left
+              normal = [-1 / Math.SQRT2, -1 / Math.SQRT2];
+            } else if (Math.abs(-mx + mz - L) < 0.02) {
+              faceMat = this.solidMaterials.L; // Front-Left
+              normal = [-1 / Math.SQRT2, 1 / Math.SQRT2];
+            }
+
+            if (faceMat && normal) {
+              const dx = p2[0] - p1[0];
+              const dz = p2[1] - p1[1];
+              const len = Math.sqrt(dx * dx + dz * dz);
+              if (len > 0.05) {
+                const margin = 0.035;
+                const insetFactor = Math.min(0.2, margin / len);
+                const s1x = p1[0] + dx * insetFactor;
+                const s1z = p1[1] + dz * insetFactor;
+                const s2x = p2[0] - dx * insetFactor;
+                const s2z = p2[1] - dz * insetFactor;
+
+                const wallOff = 0.008;
+                const wallGeo = new THREE.BufferGeometry();
+                const v1 = [s1x + normal[0] * wallOff, -0.44, s1z + normal[1] * wallOff];
+                const v2 = [s2x + normal[0] * wallOff, -0.44, s2z + normal[1] * wallOff];
+                const v3 = [s2x + normal[0] * wallOff,  0.44, s2z + normal[1] * wallOff];
+                const v4 = [s1x + normal[0] * wallOff,  0.44, s1z + normal[1] * wallOff];
+
+                const positions = new Float32Array([
+                  v1[0], v1[1], v1[2],
+                  v2[0], v2[1], v2[2],
+                  v3[0], v3[1], v3[2],
+
+                  v1[0], v1[1], v1[2],
+                  v3[0], v3[1], v3[2],
+                  v4[0], v4[1], v4[2]
+                ]);
+                wallGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                wallGeo.computeVertexNormals();
+
+                const wallMesh = new THREE.Mesh(wallGeo, faceMat);
+                group.add(wallMesh);
+              }
+            }
+          }
+
+          group.position.set(x * 1.0, y * 1.0, z * 1.0);
+          group.userData = { initialX: x + 1, initialY: y + 1, initialZ: z + 1, isFisher: true };
+
+          this.cubeGroup.add(group);
+          this.cubies.push(group);
         }
       }
     }
   }
 
   /**
-   * Builds the WitEden & Oskar Mixup 3x3 (Chamfered pieces enabling 45° slice swaps)
+   * Builds the WitEden & Oskar Mixup 3x3 (with solid mechanical core)
    */
   buildMixupCube() {
     this.size = 3;
@@ -559,6 +630,11 @@ class RubiksCube3D {
     const spacing = 1.0;
     const offset = 1;
     const cubieGeo = new THREE.BoxGeometry(cubieSize, cubieSize, cubieSize);
+
+    // Internal speedcube spherical core visible when 45° slices turn
+    const coreGeo = new THREE.SphereGeometry(0.88, 32, 32);
+    const coreMesh = new THREE.Mesh(coreGeo, this.materials.inner);
+    this.cubeGroup.add(coreMesh);
 
     for (let x = 0; x < 3; x++) {
       for (let y = 0; y < 3; y++) {
@@ -731,13 +807,18 @@ class RubiksCube3D {
     const { axis, layers, angle } = resolved;
     const N = this.size;
     const offset = (N - 1) / 2;
-    const threshold = 0.35; // slightly wider threshold for shape-mods
+    const threshold = (this.puzzleType === 'mirror' || this.puzzleType === 'fisher') ? 0.35 : 0.25;
 
     const selectedCubies = this.cubies.filter(cubie => {
       const coord = cubie.position[axis];
       const layerIdx = Math.round(coord + offset);
       return layers.includes(layerIdx) && Math.abs((layerIdx - offset) - coord) < threshold;
     });
+
+    // On Mixup 3x3, if a slice is at 45°, perpendicular face turns are mechanically bandaged
+    if (this.puzzleType === 'mixup' && !rawMove.isSlice && !rawMove.isRotation && selectedCubies.length < 9) {
+      throw new Error(`Face ${rawMove.face || ''} is blocked by a 45° slice! Complete the slice turn to 90° first.`);
+    }
 
     if (selectedCubies.length === 0) {
       return resolved;
@@ -798,8 +879,9 @@ class RubiksCube3D {
     selectedCubies.forEach(cubie => {
       this.cubeGroup.attach(cubie);
 
-      // Snap coordinates (Mirror and Fisher cubes preserve their relative offsets)
-      if (!cubie.userData.isMirror && !cubie.userData.isFisher) {
+      if (this.puzzleType === 'mixup') {
+        this.snapMixupPosition(cubie, axis);
+      } else if (!cubie.userData.isMirror) {
         cubie.position.x = Math.round(cubie.position.x + offset) - offset;
         cubie.position.y = Math.round(cubie.position.y + offset) - offset;
         cubie.position.z = Math.round(cubie.position.z + offset) - offset;
@@ -811,15 +893,38 @@ class RubiksCube3D {
     this.pivotGroup.rotation.set(0, 0, 0);
   }
 
+  snapMixupPosition(cubie, axis) {
+    let uKey, vKey;
+    if (axis === 'x') { uKey = 'y'; vKey = 'z'; }
+    else if (axis === 'y') { uKey = 'x'; vKey = 'z'; }
+    else { uKey = 'x'; vKey = 'y'; }
+
+    const u = cubie.position[uKey];
+    const v = cubie.position[vKey];
+    const r = Math.sqrt(u * u + v * v);
+    if (r < 0.1) return;
+
+    // Radius is either ~1.0 (centers) or ~sqrt(2) (edges/corners in plane)
+    const targetR = Math.abs(r - 1.0) < 0.25 ? 1.0 : (Math.abs(r - Math.SQRT2) < 0.25 ? Math.SQRT2 : r);
+    const theta = Math.atan2(v, u);
+    const step = Math.PI / 4;
+    const snappedTheta = Math.round(theta / step) * step;
+
+    let su = targetR * Math.cos(snappedTheta);
+    let sv = targetR * Math.sin(snappedTheta);
+
+    if (Math.abs(su - Math.round(su)) < 0.02) su = Math.round(su);
+    if (Math.abs(sv - Math.round(sv)) < 0.02) sv = Math.round(sv);
+
+    cubie.position[uKey] = su;
+    cubie.position[vKey] = sv;
+    cubie.position[axis] = Math.round(cubie.position[axis]);
+  }
+
   snapOrientation(cubie) {
-    // If Mixup puzzle, allow 45° snapping
+    // If Mixup puzzle, maintain exact rotation without gimbal distortion
     if (this.puzzleType === 'mixup') {
-      const euler = new THREE.Euler().setFromQuaternion(cubie.quaternion, 'XYZ');
-      const snapAngle = (a) => Math.round(a / (Math.PI / 4)) * (Math.PI / 4);
-      euler.x = snapAngle(euler.x);
-      euler.y = snapAngle(euler.y);
-      euler.z = snapAngle(euler.z);
-      cubie.quaternion.setFromEuler(euler);
+      cubie.quaternion.normalize();
       return;
     }
 

@@ -276,10 +276,10 @@ class CubeApp {
         { name: 'Sexy Move Extrusion', seq: "R U R' U'" }
       ],
       mixup: [
-        { name: '45° Edge-Center Swap', seq: "M45 U2 M45' U2" },
-        { name: 'Mixup 45° Trigger', seq: "M45 U M45' U'" },
-        { name: 'Double Slice Mixup', seq: "M45 E45 M45' E45'" },
-        { name: 'Super Mixup Shape-shift', seq: "M45 U M45' U' M45 U2 M45' U2" }
+        { name: '45° Edge-Center Swap (90°)', seq: "M45 M45 U2 M45 M45 U2" },
+        { name: 'Mixup 45° Star Shape', seq: "M45 E45 S45" },
+        { name: 'Mixup 45° Reset', seq: "S45' E45' M45'" },
+        { name: 'Oskar Edge-Center Cycle', seq: "M45 M45 U2 M45' M45' U2" }
       ]
     };
   }
