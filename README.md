@@ -1,19 +1,49 @@
-# 🧊 3D Rubik's Cube Simulator (2×2, 3×3, 4×4)
+# 🧊 3D Rubik's Cube Simulator & Designer Studio
 
-A responsive 3D Rubik's Cube simulator built with **Three.js** and vanilla JavaScript. Features dynamic **View-Relative WCA Notation** (where `R` is always the face to the right of your camera view), a **Chess-Style Move History** with instant state jumping, and comprehensive **State Saving / Bookmarking**.
+A responsive, high-performance 3D Rubik's Cube and twisty puzzle simulator built with **Three.js** and vanilla JavaScript. Features dynamic **View-Relative WCA Notation** (where `R` is always the face to the right of your camera view), a **Chess-Style Move History** with instant state jumping, an interactive **Cube Designer Studio**, and special shape-mod puzzles including the **Fisher Cube**, **Mirror Cube**, and the **WitEden & Oskar Mixup 3×3** (with 45° slice turns).
 
 ---
 
 ## ✨ Features
 
-### 1. Multi-Size Support (2×2, 3×3, 4×4)
+### 1. Puzzles & Shape Mods
 - **2×2 Pocket Cube**: Fast 4-piece corners simulation.
-- **3×3 Standard Cube**: Full Rubik's speedcube experience.
-- **4×4 Rubik's Revenge**: Multi-layer cube with inner slice moves and parity algorithms.
-- Switch seamlessly between sizes anytime with the top bar.
+- **3×3 Standard Rubik's Cube**: Full speedcube experience with smooth spring animations.
+- **4×4 Rubik's Revenge**: Multi-layer cube supporting inner slices and parity algorithms.
+- **🐟 Fisher Cube (Tony Fisher 3×3 Shape Mod)**:
+  - Formed by rotating the vertical cutting plane 45° around the core.
+  - Three distinct piece geometries: square face centers, pentagonal corner-edges, and right-triangle corners.
+  - Shape-shifts into striking jagged silhouettes when turned.
+- **🪞 Mirror / Bump Cube**:
+  - Solved strictly by geometry and piece dimensions instead of colors.
+  - Asymmetric slice thicknesses across all three axes ($T_x, T_y, T_z$).
+  - Rendered with a high-detail brushed metallic shader.
+- **🔀 WitEden & Oskar Mixup 3×3**:
+  - Invented by Oskar van Deventer and produced by WitEden.
+  - Middle slices ($M, E, S$) can rotate in increments of **45°** (`M45`, `E45`, `S45`).
+  - Allows edge and center pieces to swap roles, creating shape-shifting states and deep combinatorial puzzles.
 
-### 2. View-Relative Notation (Dynamic to Camera)
-- **Camera-Adaptive Controls**: Mouse drag orbits the whole cube without turning slices.
+---
+
+### 2. 🎨 Interactive Cube Designer Studio
+Personalize every aesthetic detail of your cube in real-time:
+- **Preset Palettes**:
+  - *Standard WCA* (Classic competition colors)
+  - *Pastel / Macaron* (Soft aesthetic tones)
+  - *Cyberpunk / Neon* (Vibrant synthwave hues)
+  - *Brushed Metallic* (Polished gold and titanium)
+  - *Carbon Fiber* (Stealth modern dark theme)
+- **Face Color Pickers**: Individual hex color pickers for Up, Down, Front, Back, Left, and Right faces.
+- **Core Body Material**: Switch the internal plastic between Midnight Black, Clean White, Primary Uncolored, and Carbon Dark.
+- **Sticker Geometry Controls**:
+  - Adjust sticker inset / padding margin (from classic bordered stickers to borderless full-bleed tiles).
+  - Adjust corner roundness / bevel radius.
+- **Surface Finish**: Fine-tune roughness and metalness between high-gloss competition plastic, frosted matte, and metallic finishes.
+
+---
+
+### 3. View-Relative Notation (Dynamic to Camera)
+- **Camera-Adaptive Controls**: Mouse drag orbits the entire cube view smoothly without turning layers.
 - **`R` is Always on Your Right**: Notation is mapped dynamically to your perspective in 3D space:
   - **`R` (Right)**: Always turns the layer physically situated to the right of your view.
   - **`L` (Left)**: Always turns the layer physically situated to the left of your view.
@@ -21,13 +51,15 @@ A responsive 3D Rubik's Cube simulator built with **Three.js** and vanilla JavaS
   - **`B` (Back)**: Always turns the face opposite from you.
   - **`U` (Up)**: Always turns the top layer.
   - **`D` (Down)**: Always turns the bottom layer.
-- **Live Orientation HUD**: A color-coded HUD displays the active mapping (e.g., `F: Green`, `R: Red`, `U: White`) and updates in real-time as you orbit.
-- **Fixed WCA Toggle**: Easily toggle between View-Relative and fixed world coordinates if needed.
+- **Live Orientation HUD**: Displays the active face mapping in real time (e.g., `F: Green`, `R: Red`, `U: White`).
+- **Fixed WCA Toggle**: Switch back to fixed world axes with a single click if desired.
 
-### 3. Chess-Style Move History Sidebar
-- **Paired Move Notation**: Moves are tracked in pairs (`1. R U`, `2. R' U'`) just like a chess scoresheet.
-- **Color Dots**: Each move displays a mini color indicator matching the face that turned.
-- **Instant State Jumping**: Click any past move in the history to instantly restore the cube to that exact position.
+---
+
+### 4. Chess-Style Move History Sidebar
+- **Paired Move Notation**: Moves are tracked in pairs (`1. R U`, `2. R' U'`) matching official chess scoresheet notation.
+- **Color Dots**: Each move features a color indicator corresponding to the turned face.
+- **Instant State Jumping**: Click any past move in the history to instantly restore the cube to that exact position (zero cumulative drift).
 - **Navigation Toolbar**:
   - `|◀` Jump to start (Solved state)
   - `◀` Step back 1 move
@@ -38,21 +70,29 @@ A responsive 3D Rubik's Cube simulator built with **Three.js** and vanilla JavaS
   - **Branch**: Continue playing from a past move, branching into a new line.
   - **Insert**: Splice new moves into the sequence after the current step.
 
-### 4. Saved States & Bookmarks (Checkpoints)
-- **Bookmark Any Position**: Name and save states (e.g., *"Cross Solved"*, *"F2L"*, *"Checkerboard"*).
-- **Persistent Storage**: Saved states persist across sessions in `localStorage`.
+---
+
+### 5. Saved States & Bookmarks (Checkpoints)
+- **Bookmark Any Position**: Name and save states (e.g., *"Cross Solved"*, *"F2L"*, *"Checkerboard"*, *"Mixup 45 Shape"*).
+- **Persistent Storage**: Saved states persist across browser sessions via `localStorage`.
 - **Import / Export JSON**: Export saved states as a `.json` backup file or import existing states.
 
-### 5. Algorithm Presets & WCA Scramble Generator
-- **Algorithm Library**: Pre-loaded with common triggers and permutations:
+---
+
+### 6. Algorithm Presets & WCA Scramble Generator
+- **Algorithm Library**: Pre-loaded with common triggers, permutations, and parity sequences:
   - *Sexy Move* (`R U R' U'`), *Sune*, *Anti-Sune*
   - *T-Perm*, *Y-Perm*, *J-Perm*, *H-Perm*, *Z-Perm*
   - *Patterns*: Checkerboard, Cube in a Cube, Anaconda, Superflip
   - *4×4 Parity*: OLL Parity, PLL Parity, Center Swap
+  - *Mixup Sequences*: 45° slice swaps and center interchanges
 - **WCA Scrambler**: Generates official-style scrambles tailored to each cube size.
 
-### 6. Speed Control & Playback
+---
+
+### 7. Speed Control & Playback
 - **Speed Slider**: Adjustable turn animation speed from **Instant (0ms)** to **Fast (90ms)**, **Normal (220ms)**, and **Slow (450ms)**.
+- **Virtual Keypad**: Quick buttons for face turns, wide turns, slice turns, and 45° Mixup slice actions.
 - **Timeline Bar**: Real-time progress bar with animated chips highlighting active moves.
 - **Invert Sequence**: Instantly reverses and inverts any entered sequence.
 
@@ -61,7 +101,7 @@ A responsive 3D Rubik's Cube simulator built with **Three.js** and vanilla JavaS
 ## 🚀 Quick Start
 
 ### Option 1: Open Directly in Browser
-Simply double-click or open `index.html` in any web browser (Chrome, Edge, Firefox, Safari). No installation or build steps required.
+Simply open `index.html` in any modern web browser (Chrome, Edge, Firefox, Safari). No build tools, compilers, or server installations are required.
 
 ### Option 2: Run via Node.js
 ```bash
@@ -72,7 +112,7 @@ cd rubiks-simulator
 # Start the local server
 npm start
 ```
-Then visit [http://localhost:3000](http://localhost:3000) in your browser.
+Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
@@ -85,6 +125,7 @@ Then visit [http://localhost:3000](http://localhost:3000) in your browser.
 | `U2`, `D2`, `L2`, `R2`, `F2`, `B2` | Half turn (180°) |
 | `Rw` or `r`, `Uw`, `Dw`, `Lw`, `Fw`, `Bw` | Wide turn (2 outer layers simultaneously) |
 | `M`, `E`, `S` | Slice moves (Middle, Equator, Standing) |
+| `M45`, `M45'`, `E45`, `E45'`, `S45`, `S45'` | **Mixup 3×3**: 45° slice turns swapping centers and edges |
 | `2R`, `2L`, `2U`, `2D` (4×4) | Single inner slice turn |
 | `x`, `y`, `z` | Whole cube rotation in the direction of `R`, `U`, `F` |
 
@@ -94,13 +135,13 @@ Then visit [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 rubiks-simulator/
-├── index.html       # Main HTML markup and UI structure
-├── style.css        # Modern glassmorphic dark theme stylesheet
-├── cube.js          # Three.js 3D WebGL cube engine & snapshot state manager
-├── notation.js      # WCA notation parser, validator, and scrambler
-├── app.js           # Application logic, chess history, and bookmark manager
+├── index.html       # Main layout, puzzle selector, designer studio modal & HUD
+├── style.css        # Glassmorphic dark UI, palette picker, and chess history table
+├── cube.js          # Three.js 3D engine: standard, Fisher, Mirror, and Mixup geometry
+├── notation.js      # WCA notation parser, 45° slice support, and scrambler
+├── app.js           # Application controller, chess table, bookmarks, and designer sync
 ├── server.js        # Zero-dependency local HTTP static server
-├── package.json     # Project metadata and scripts
+├── package.json     # Project metadata and start scripts
 ├── .gitignore       # Git ignore rules
 └── README.md        # Documentation
 ```

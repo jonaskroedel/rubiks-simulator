@@ -1,16 +1,18 @@
 /**
  * Main Application Logic for Rubik's Cube Simulator
  * Coordinates UI, 3D Engine, Notation Parser, Playback Queue,
- * and Chess-Style Move History with Saved States.
+ * Chess-Style Move History, Saved States, and Cube Designer Studio.
  */
 
 class CubeApp {
   constructor() {
     this.currentSize = 3;
+    this.currentType = 'cube3'; // 'cube2', 'cube3', 'cube4', 'fisher', 'mirror', 'mixup'
+
     const NotationEngineClass = window.NotationEngine;
     const RubiksCube3DClass = window.RubiksCube3D;
 
-    this.engine = new NotationEngineClass(this.currentSize);
+    this.engine = new NotationEngineClass(this.currentSize, this.currentType);
     
     // Playback state
     this.moveQueue = [];
@@ -18,14 +20,16 @@ class CubeApp {
     this.isPlaying = false;
     this.isPaused = false;
 
-    // Move History Stack & Pointer (Chess-style state tracking)
-    // Step 0 is the initial solved state
+    // Move History Stack & Pointer
     this.history = [];
     this.historyPointer = 0;
     this.historyMode = 'branch'; // 'branch' or 'insert'
 
     // Saved States / Bookmarks
     this.savedStates = this.loadSavedStatesFromStorage();
+
+    // Theme Presets Catalog
+    this.initThemePresets();
 
     // Presets catalog
     this.initPresets();
@@ -35,9 +39,9 @@ class CubeApp {
 
     // Init 3D Cube
     const canvasContainer = document.getElementById('canvas-container');
-    this.cube = new RubiksCube3DClass(canvasContainer, this.currentSize);
+    this.cube = new RubiksCube3DClass(canvasContainer, this.currentSize, this.currentType);
 
-    // Record initial solved state snapshot
+    // Initial solved snapshot
     this.initHistory();
 
     // Bind events & orientation HUD
@@ -47,6 +51,8 @@ class CubeApp {
     this.updatePresetsDropdown();
     this.renderChessHistory();
     this.renderSavedStatesList();
+    this.updateKeypadForPuzzle();
+    this.syncDesignerInputsFromTheme();
     this.validateAndPreviewInput();
   }
 
@@ -54,13 +60,53 @@ class CubeApp {
     this.history = [{
       index: 0,
       raw: 'Start',
-      name: 'Solved Cube (Initial)',
+      name: 'Solved Puzzle (Initial)',
       targetColor: 'White',
-      targetColorHex: '#F7F8FA',
+      targetColorHex: this.cube ? this.cube.theme.U : '#F7F8FA',
       snapshot: this.cube.saveSnapshot(),
       timestamp: Date.now()
     }];
     this.historyPointer = 0;
+  }
+
+  initThemePresets() {
+    this.themePresets = {
+      classic: {
+        name: 'WCA Classic',
+        U: '#F7F8FA', D: '#FFD500', F: '#009E48', B: '#0046AD', R: '#C41230', L: '#FF5500',
+        body: '#121316', radius: 24, padding: 16, roughness: 0.28, metalness: 0.04
+      },
+      cyberpunk: {
+        name: 'Cyberpunk Neon',
+        U: '#fdf2f8', D: '#facc15', F: '#10b981', B: '#06b6d4', R: '#f43f5e', L: '#a855f7',
+        body: '#090d16', radius: 18, padding: 14, roughness: 0.15, metalness: 0.12
+      },
+      pastel: {
+        name: 'Pastel Dream',
+        U: '#f8fafc', D: '#fef08a', F: '#86efac', B: '#93c5fd', R: '#fca5a5', L: '#fdba74',
+        body: '#2d3748', radius: 32, padding: 18, roughness: 0.45, metalness: 0.02
+      },
+      japanese: {
+        name: 'Japanese Scheme',
+        U: '#F7F8FA', D: '#0046AD', F: '#009E48', B: '#FFD500', R: '#C41230', L: '#FF5500',
+        body: '#121316', radius: 24, padding: 16, roughness: 0.28, metalness: 0.04
+      },
+      carbon: {
+        name: 'Carbon Stealth',
+        U: '#94a3b8', D: '#64748b', F: '#0f766e', B: '#1e3a8a', R: '#991b1b', L: '#c2410c',
+        body: '#0b0f17', radius: 12, padding: 12, roughness: 0.5, metalness: 0.25
+      },
+      silver: {
+        name: 'Mirror Silver',
+        U: '#e2e8f0', D: '#cbd5e1', F: '#94a3b8', B: '#64748b', R: '#e2e8f0', L: '#cbd5e1',
+        body: '#1e293b', radius: 8, padding: 10, roughness: 0.18, metalness: 0.88
+      },
+      gold: {
+        name: 'Mirror Gold',
+        U: '#fef08a', D: '#facc15', F: '#eab308', B: '#ca8a04', R: '#f59e0b', L: '#fbbf24',
+        body: '#1c1917', radius: 8, padding: 10, roughness: 0.2, metalness: 0.85
+      }
+    };
   }
 
   cacheElements() {
@@ -70,6 +116,7 @@ class CubeApp {
     this.resetCamBtn = document.getElementById('btn-reset-cam');
     this.btnToggleHistory = document.getElementById('btn-toggle-history');
     this.headerHistoryCount = document.getElementById('header-history-count');
+    this.btnToggleDesigner = document.getElementById('btn-toggle-designer');
 
     // Orientation HUD
     this.btnToggleViewMode = document.getElementById('btn-toggle-view-mode');
@@ -111,6 +158,7 @@ class CubeApp {
     // Keypad & Help
     this.keypadToggleBtn = document.getElementById('btn-toggle-keypad');
     this.keypadPanel = document.getElementById('keypad-panel');
+    this.keypadRowMixup = document.getElementById('keypad-row-mixup');
     this.helpToggleBtn = document.getElementById('btn-toggle-help');
     this.helpModal = document.getElementById('help-modal');
     this.helpCloseBtn = document.getElementById('btn-close-help');
@@ -145,42 +193,93 @@ class CubeApp {
     this.btnExportStates = document.getElementById('btn-export-states');
     this.btnImportStates = document.getElementById('btn-import-states');
     this.importStatesFile = document.getElementById('import-states-file');
+
+    // Designer Modal Elements
+    this.designerModal = document.getElementById('designer-modal');
+    this.btnCloseDesigner = document.getElementById('btn-close-designer');
+    this.btnApplyDesigner = document.getElementById('btn-apply-designer');
+    this.btnResetTheme = document.getElementById('btn-reset-theme');
+    this.btnExportTheme = document.getElementById('btn-export-theme');
+    this.presetThemeBtns = document.querySelectorAll('.theme-preset-btn');
+
+    this.facePickers = {
+      U: document.getElementById('picker-color-U'),
+      D: document.getElementById('picker-color-D'),
+      F: document.getElementById('picker-color-F'),
+      B: document.getElementById('picker-color-B'),
+      R: document.getElementById('picker-color-R'),
+      L: document.getElementById('picker-color-L')
+    };
+
+    this.hexLabels = {
+      U: document.getElementById('hex-U'),
+      D: document.getElementById('hex-D'),
+      F: document.getElementById('hex-F'),
+      B: document.getElementById('hex-B'),
+      R: document.getElementById('hex-R'),
+      L: document.getElementById('hex-L')
+    };
+
+    this.pickerColorBody = document.getElementById('picker-color-body');
+    this.bodyPresetPills = document.querySelectorAll('.body-preset-pill');
+
+    this.sliderRadius = document.getElementById('slider-radius');
+    this.valRadius = document.getElementById('val-radius');
+    this.sliderPadding = document.getElementById('slider-padding');
+    this.valPadding = document.getElementById('val-padding');
+    this.sliderRoughness = document.getElementById('slider-roughness');
+    this.valRoughness = document.getElementById('val-roughness');
+    this.sliderMetalness = document.getElementById('slider-metalness');
+    this.valMetalness = document.getElementById('val-metalness');
   }
 
   initPresets() {
     this.presets = {
-      2: [
+      cube2: [
         { name: 'Sexy Move (4 moves)', seq: "R U R' U'" },
         { name: 'Sune (7 moves)', seq: "R U R' U R U2 R'" },
         { name: 'Anti-Sune (7 moves)', seq: "R U2 R' U' R U' R'" },
         { name: 'J-Perm (13 moves)', seq: "R U R' F' R U R' U' R' F R2 U' R'" },
-        { name: 'Y-Perm (17 moves)', seq: "F R U' R' U' R U R' F' R U R' U' R' F R F'" },
         { name: '2x2 Checkerboard', seq: "R2 F2 R2" }
       ],
-      3: [
+      cube3: [
         { name: 'Sexy Move', seq: "R U R' U'" },
         { name: 'T-Perm (PLL)', seq: "R U R' U' R' F R2 U' R' U' R U R' F'" },
         { name: 'Y-Perm (PLL)', seq: "F R U' R' U' R U R' F' R U R' U' R' F R F'" },
         { name: 'J-Perm (PLL)', seq: "R U R' F' R U R' U' R' F R2 U' R'" },
         { name: 'Sune (OLL)', seq: "R U R' U R U2 R'" },
         { name: 'Anti-Sune (OLL)', seq: "R U2 R' U' R U' R'" },
-        { name: 'H-Perm (PLL)', seq: "M2 U M2 U2 M2 U M2" },
-        { name: 'Z-Perm (PLL)', seq: "M' U M2 U M2 U M' U2 M2" },
         { name: 'Checkerboard Pattern', seq: "M2 E2 S2" },
-        { name: 'Checkerboard (Outer)', seq: "R2 L2 U2 D2 F2 B2" },
         { name: 'Cube in a Cube', seq: "F L F U' R U F2 L2 U' L' B D' B' L2 U" },
         { name: 'Anaconda Pattern', seq: "L U B' U' R L' B R' F B' D R D' F'" },
         { name: 'Superflip (20 moves)', seq: "U R2 F B R B2 R U2 L B2 R U' D' R2 F R' L B2 U2 F2" }
       ],
-      4: [
+      cube4: [
         { name: 'Sexy Move', seq: "R U R' U'" },
         { name: 'Wide Sexy Move', seq: "Rw U Rw' U'" },
         { name: 'T-Perm', seq: "R U R' U' R' F R2 U' R' U' R U R' F'" },
         { name: '4x4 Checkerboard (Inner)', seq: "2R2 2L2 2U2 2D2 2F2 2B2" },
         { name: '4x4 Checkerboard (Wide)', seq: "Rw2 Lw2 Uw2 Dw2 Fw2 Bw2" },
         { name: 'OLL Parity (Opposite Edges)', seq: "Rw U2 x Rw U2 Rw U2 Rw' U2 Lw U2 Rw' U2 Rw U2 Rw' U2 Rw'" },
-        { name: 'PLL Parity (Opposite Edges)', seq: "2R2 U2 2R2 Uw2 2R2 2U2" },
-        { name: 'Center Swap Pattern', seq: "2R2 2L2 2U2 2D2" }
+        { name: 'PLL Parity (Opposite Edges)', seq: "2R2 U2 2R2 Uw2 2R2 2U2" }
+      ],
+      fisher: [
+        { name: 'T-Perm Shape-Shift', seq: "R U R' U' R' F R2 U' R' U' R U R' F'" },
+        { name: 'Sune Shape-Shift', seq: "R U R' U R U2 R'" },
+        { name: 'Corner Swap Trigger', seq: "R U R' U'" },
+        { name: 'Middle Layer Twist', seq: "M2 U2 M2 U2" }
+      ],
+      mirror: [
+        { name: 'T-Perm Jagged Shift', seq: "R U R' U' R' F R2 U' R' U' R U R' F'" },
+        { name: 'Cube in a Cube Jagged', seq: "F L F U' R U F2 L2 U' L' B D' B' L2 U" },
+        { name: 'Checkerboard Architecture', seq: "R2 L2 U2 D2 F2 B2" },
+        { name: 'Sexy Move Extrusion', seq: "R U R' U'" }
+      ],
+      mixup: [
+        { name: '45° Edge-Center Swap', seq: "M45 U2 M45' U2" },
+        { name: 'Mixup 45° Trigger', seq: "M45 U M45' U'" },
+        { name: 'Double Slice Mixup', seq: "M45 E45 M45' E45'" },
+        { name: 'Super Mixup Shape-shift', seq: "M45 U M45' U' M45 U2 M45' U2" }
       ]
     };
   }
@@ -188,7 +287,7 @@ class CubeApp {
   updatePresetsDropdown() {
     if (!this.presetSelect) return;
     this.presetSelect.innerHTML = '<option value="" disabled selected>— Select Algorithm Preset —</option>';
-    const list = this.presets[this.currentSize] || [];
+    const list = this.presets[this.currentType] || this.presets[this.currentSize] || [];
     list.forEach((p) => {
       const opt = document.createElement('option');
       opt.value = p.seq;
@@ -203,7 +302,7 @@ class CubeApp {
       this.updateOrientationHUD(orientation, mode);
     });
 
-    // View Mode Toggle (Relative vs Fixed)
+    // View Mode Toggle
     if (this.btnToggleViewMode) {
       this.btnToggleViewMode.addEventListener('click', () => {
         const nextMode = this.cube.viewMode === 'relative' ? 'fixed' : 'relative';
@@ -211,6 +310,144 @@ class CubeApp {
         this.showToast(nextMode === 'relative' 
           ? 'View-Relative: R is to the right of where you look' 
           : 'Fixed Mode: Standard absolute WCA orientation');
+      });
+    }
+
+    // Puzzle / Size Selector
+    this.sizeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const newSize = parseInt(btn.dataset.size, 10);
+        const newType = btn.dataset.type || (newSize === 2 ? 'cube2' : (newSize === 4 ? 'cube4' : 'cube3'));
+
+        if (newType === this.currentType && newSize === this.currentSize) return;
+
+        this.sizeButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        this.switchPuzzle(newSize, newType);
+      });
+    });
+
+    // Cube Designer Modal Toggle
+    if (this.btnToggleDesigner && this.designerModal) {
+      this.btnToggleDesigner.addEventListener('click', () => {
+        this.syncDesignerInputsFromTheme();
+        this.designerModal.classList.remove('hidden');
+      });
+    }
+
+    if (this.btnCloseDesigner && this.designerModal) {
+      this.btnCloseDesigner.addEventListener('click', () => {
+        this.designerModal.classList.add('hidden');
+      });
+    }
+
+    if (this.btnApplyDesigner && this.designerModal) {
+      this.btnApplyDesigner.addEventListener('click', () => {
+        this.designerModal.classList.add('hidden');
+        this.showToast('Custom theme applied!');
+      });
+    }
+
+    // Theme Presets Click
+    this.presetThemeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const presetKey = btn.dataset.preset;
+        const presetData = this.themePresets[presetKey];
+        if (!presetData) return;
+
+        this.presetThemeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        this.cube.applyTheme(presetData);
+        this.syncDesignerInputsFromTheme();
+        this.showToast(`Applied theme preset: ${presetData.name}`);
+      });
+    });
+
+    // Color Pickers
+    Object.keys(this.facePickers).forEach(face => {
+      const picker = this.facePickers[face];
+      if (!picker) return;
+      picker.addEventListener('input', (e) => {
+        const hex = e.target.value.toUpperCase();
+        if (this.hexLabels[face]) this.hexLabels[face].textContent = hex;
+        this.cube.applyTheme({ [face]: hex });
+      });
+    });
+
+    // Body Color Picker
+    if (this.pickerColorBody) {
+      this.pickerColorBody.addEventListener('input', (e) => {
+        const hex = e.target.value;
+        this.cube.applyTheme({ body: hex });
+      });
+    }
+
+    // Body Preset Pills
+    this.bodyPresetPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        this.bodyPresetPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const col = pill.dataset.color;
+        if (this.pickerColorBody) this.pickerColorBody.value = col;
+        this.cube.applyTheme({ body: col });
+      });
+    });
+
+    // Sliders
+    if (this.sliderRadius) {
+      this.sliderRadius.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (this.valRadius) this.valRadius.textContent = `${val}px`;
+        this.cube.applyTheme({ radius: val });
+      });
+    }
+
+    if (this.sliderPadding) {
+      this.sliderPadding.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (this.valPadding) this.valPadding.textContent = `${val}px`;
+        this.cube.applyTheme({ padding: val });
+      });
+    }
+
+    if (this.sliderRoughness) {
+      this.sliderRoughness.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (this.valRoughness) this.valRoughness.textContent = `${Math.round(val * 100)}%`;
+        this.cube.applyTheme({ roughness: val });
+      });
+    }
+
+    if (this.sliderMetalness) {
+      this.sliderMetalness.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (this.valMetalness) this.valMetalness.textContent = `${Math.round(val * 100)}%`;
+        this.cube.applyTheme({ metalness: val });
+      });
+    }
+
+    // Reset Theme
+    if (this.btnResetTheme) {
+      this.btnResetTheme.addEventListener('click', () => {
+        this.cube.applyTheme(this.themePresets.classic);
+        this.syncDesignerInputsFromTheme();
+        this.showToast('Reset theme to WCA Classic.');
+      });
+    }
+
+    // Export Theme
+    if (this.btnExportTheme) {
+      this.btnExportTheme.addEventListener('click', () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.cube.theme, null, 2));
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute("href", dataStr);
+        dlAnchor.setAttribute("download", `cubesim_theme_${Date.now()}.json`);
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        dlAnchor.remove();
+        this.showToast('Theme exported to JSON file!');
       });
     }
 
@@ -269,12 +506,11 @@ class CubeApp {
       });
     }
 
-    // Solved Row Start Button
     if (this.chessRowStart) {
       this.chessRowStart.addEventListener('click', () => this.jumpToHistoryStep(0));
     }
 
-    // History Mode Radios (Branch vs Insert)
+    // History Mode Radios
     document.querySelectorAll('input[name="historyMode"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         this.historyMode = e.target.value;
@@ -282,7 +518,6 @@ class CubeApp {
       });
     });
 
-    // Copy History & Clear History
     if (this.btnCopyHistory) {
       this.btnCopyHistory.addEventListener('click', () => {
         const movesStr = this.history.slice(1).map(m => m.raw).join(' ');
@@ -298,7 +533,7 @@ class CubeApp {
 
     if (this.btnClearHistory) {
       this.btnClearHistory.addEventListener('click', () => {
-        if (confirm('Clear move history and reset to solved state?')) {
+        if (confirm('Clear move history and reset puzzle to solved state?')) {
           this.cube.reset();
           this.initHistory();
           this.renderChessHistory();
@@ -307,7 +542,6 @@ class CubeApp {
       });
     }
 
-    // Save State Confirm Button
     if (this.btnSaveStateConfirm) {
       this.btnSaveStateConfirm.addEventListener('click', () => {
         const name = this.saveStateNameInput.value.trim();
@@ -325,7 +559,6 @@ class CubeApp {
       });
     }
 
-    // Export / Import States
     if (this.btnExportStates) {
       this.btnExportStates.addEventListener('click', () => this.exportStatesJSON());
     }
@@ -333,19 +566,6 @@ class CubeApp {
       this.btnImportStates.addEventListener('click', () => this.importStatesFile.click());
       this.importStatesFile.addEventListener('change', (e) => this.handleImportStatesFile(e));
     }
-
-    // Cube Size Toggle
-    this.sizeButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const newSize = parseInt(btn.dataset.size, 10);
-        if (newSize === this.currentSize) return;
-
-        this.sizeButtons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        this.switchSize(newSize);
-      });
-    });
 
     // Camera Presets
     this.camPresetButtons.forEach(btn => {
@@ -373,7 +593,6 @@ class CubeApp {
       }
     });
 
-    // Run / Clear
     this.btnRun.addEventListener('click', () => {
       this.startSequenceExecution();
     });
@@ -405,21 +624,18 @@ class CubeApp {
       this.stopPlayback();
     });
 
-    // Scramble Button
     this.btnScramble.addEventListener('click', () => {
       this.executeScramble();
     });
 
-    // Solved / Reset Cube Button
     this.btnResetCube.addEventListener('click', () => {
       this.stopPlayback();
       this.cube.reset();
       this.initHistory();
       this.renderChessHistory();
-      this.showToast('Cube reset to solved state.');
+      this.showToast('Puzzle reset to solved state.');
     });
 
-    // Invert Sequence Button
     this.btnInvertSeq.addEventListener('click', () => {
       const current = this.notationInput.value;
       const inverted = this.engine.invertSequence(current);
@@ -430,7 +646,6 @@ class CubeApp {
       }
     });
 
-    // Presets Dropdown
     this.presetSelect.addEventListener('change', () => {
       if (!this.presetSelect.value) return;
       this.notationInput.value = this.presetSelect.value;
@@ -438,24 +653,17 @@ class CubeApp {
       this.presetSelect.selectedIndex = 0;
     });
 
-    // Speed Slider
     this.speedSlider.addEventListener('input', (e) => {
       const val = parseInt(e.target.value, 10);
       let label = `${val}ms`;
-      if (val === 0) {
-        label = 'Instant (0ms)';
-      } else if (val <= 100) {
-        label = `Fast (${val}ms)`;
-      } else if (val <= 260) {
-        label = `Normal (${val}ms)`;
-      } else {
-        label = `Slow (${val}ms)`;
-      }
+      if (val === 0) label = 'Instant (0ms)';
+      else if (val <= 100) label = `Fast (${val}ms)`;
+      else if (val <= 260) label = `Normal (${val}ms)`;
+      else label = `Slow (${val}ms)`;
       this.speedLabel.textContent = label;
       this.cube.setSpeed(val);
     });
 
-    // Keypad Toggle
     if (this.keypadToggleBtn && this.keypadPanel) {
       this.keypadToggleBtn.addEventListener('click', () => {
         this.keypadPanel.classList.toggle('hidden');
@@ -463,7 +671,6 @@ class CubeApp {
       });
     }
 
-    // Keypad Buttons
     document.querySelectorAll('.key-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const moveToken = btn.dataset.move;
@@ -476,7 +683,6 @@ class CubeApp {
       });
     });
 
-    // Help Modal
     if (this.helpToggleBtn && this.helpModal) {
       this.helpToggleBtn.addEventListener('click', () => {
         this.helpModal.classList.remove('hidden');
@@ -497,7 +703,6 @@ class CubeApp {
       });
     }
 
-    // Global keyboard shortcuts (Space to Play/Pause, ArrowRight/Left to Step)
     window.addEventListener('keydown', (e) => {
       if (document.activeElement === this.notationInput || document.activeElement === this.saveStateNameInput) {
         return;
@@ -519,6 +724,79 @@ class CubeApp {
     });
   }
 
+  syncDesignerInputsFromTheme() {
+    const th = this.cube.theme;
+    Object.keys(this.facePickers).forEach(face => {
+      if (this.facePickers[face] && th[face]) {
+        this.facePickers[face].value = th[face];
+        if (this.hexLabels[face]) this.hexLabels[face].textContent = th[face].toUpperCase();
+      }
+    });
+
+    if (this.pickerColorBody && th.body) {
+      this.pickerColorBody.value = th.body;
+    }
+
+    if (this.sliderRadius && th.radius !== undefined) {
+      this.sliderRadius.value = th.radius;
+      if (this.valRadius) this.valRadius.textContent = `${th.radius}px`;
+    }
+
+    if (this.sliderPadding && th.padding !== undefined) {
+      this.sliderPadding.value = th.padding;
+      if (this.valPadding) this.valPadding.textContent = `${th.padding}px`;
+    }
+
+    if (this.sliderRoughness && th.roughness !== undefined) {
+      this.sliderRoughness.value = th.roughness;
+      if (this.valRoughness) this.valRoughness.textContent = `${Math.round(th.roughness * 100)}%`;
+    }
+
+    if (this.sliderMetalness && th.metalness !== undefined) {
+      this.sliderMetalness.value = th.metalness;
+      if (this.valMetalness) this.valMetalness.textContent = `${Math.round(th.metalness * 100)}%`;
+    }
+  }
+
+  switchPuzzle(newSize, newType) {
+    this.stopPlayback();
+    this.currentSize = newSize;
+    this.currentType = newType;
+
+    this.engine.setSize(newSize, newType);
+    this.cube.setSize(newSize, newType);
+
+    this.initHistory();
+    this.renderChessHistory();
+    this.updatePresetsDropdown();
+    this.updateKeypadForPuzzle();
+    this.validateAndPreviewInput();
+
+    const names = {
+      cube2: '2×2 Pocket Cube',
+      cube3: '3×3 Standard Cube',
+      cube4: '4×4 Revenge Cube',
+      fisher: 'Tony Fisher 45° Shape-Mod',
+      mirror: 'Mirror / Bump Cube (Brushed Metallic)',
+      mixup: 'WitEden & Oskar Mixup 3x3'
+    };
+
+    this.showToast(`Switched to: ${names[newType] || newType}`);
+  }
+
+  updateKeypadForPuzzle() {
+    const sliceKeys = document.querySelectorAll('.key-btn[data-slice="true"]');
+    sliceKeys.forEach(btn => {
+      btn.disabled = (this.currentSize === 2);
+      btn.style.opacity = this.currentSize === 2 ? '0.35' : '1.0';
+    });
+
+    // Show or hide Mixup 45° button row
+    if (this.keypadRowMixup) {
+      this.keypadRowMixup.style.display = (this.currentType === 'mixup') ? 'flex' : 'none';
+    }
+  }
+
   updateOrientationHUD(orientation, mode) {
     if (this.modeText) {
       this.modeText.textContent = (mode === 'relative') ? 'View-Relative' : 'Fixed WCA';
@@ -532,27 +810,6 @@ class CubeApp {
         if (pill.color) pill.color.textContent = fData.color;
         if (pill.dot) pill.dot.style.background = fData.colorHex;
       }
-    });
-  }
-
-  switchSize(newSize) {
-    this.stopPlayback();
-    this.currentSize = newSize;
-    this.engine.setSize(newSize);
-    this.cube.setSize(newSize);
-    this.initHistory();
-    this.renderChessHistory();
-    this.updatePresetsDropdown();
-    this.updateKeypadForSize();
-    this.validateAndPreviewInput();
-    this.showToast(`Switched to ${newSize}×${newSize} Cube`);
-  }
-
-  updateKeypadForSize() {
-    const sliceKeys = document.querySelectorAll('.key-btn[data-slice="true"]');
-    sliceKeys.forEach(btn => {
-      btn.disabled = (this.currentSize === 2);
-      btn.style.opacity = this.currentSize === 2 ? '0.35' : '1.0';
     });
   }
 
@@ -705,9 +962,6 @@ class CubeApp {
     }
   }
 
-  /**
-   * Records an executed move into the history stack with its cube snapshot
-   */
   recordMoveToHistory(move, resolved) {
     const snapshot = this.cube.saveSnapshot();
     const entry = {
@@ -721,18 +975,14 @@ class CubeApp {
     };
 
     if (this.historyMode === 'branch') {
-      // If we jumped back and make a new move in branch mode:
-      // Truncate future moves from the branch point
       if (this.historyPointer < this.history.length - 1) {
         this.history = this.history.slice(0, this.historyPointer + 1);
       }
       this.history.push(entry);
       this.historyPointer = this.history.length - 1;
     } else {
-      // Insert mode: insert right after current pointer
       this.history.splice(this.historyPointer + 1, 0, entry);
       this.historyPointer++;
-      // Re-index subsequent history entries
       for (let i = 0; i < this.history.length; i++) {
         this.history[i].index = i;
       }
@@ -741,14 +991,10 @@ class CubeApp {
     this.renderChessHistory();
   }
 
-  /**
-   * Instantly jumps the 3D cube to the state at historyIndex
-   */
   jumpToHistoryStep(index) {
     if (this.cube.isAnimating) return;
     if (index < 0 || index >= this.history.length) return;
 
-    // Pause any active queue playback
     if (this.isPlaying) {
       this.pausePlayback();
     }
@@ -761,9 +1007,6 @@ class CubeApp {
     this.showToast(index === 0 ? 'Jumped to Solved State' : `Jumped to Move ${index}: ${state.raw}`);
   }
 
-  /**
-   * Renders the Chess-style paired table in the sidebar
-   */
   renderChessHistory() {
     if (!this.chessTableBody) return;
     this.chessTableBody.innerHTML = '';
@@ -776,8 +1019,6 @@ class CubeApp {
       this.historyStepBadge.textContent = `Move ${this.historyPointer} / ${totalMoves}`;
     }
 
-    // Group moves into pairs (like chess: 1. e4 e5)
-    // index 0 is solved, so moves are 1..totalMoves
     for (let i = 1; i <= totalMoves; i += 2) {
       const moveNum = Math.ceil(i / 2);
       const moveA = this.history[i];
@@ -786,13 +1027,11 @@ class CubeApp {
       const row = document.createElement('div');
       row.className = 'chess-row';
 
-      // Move number
       const numSpan = document.createElement('span');
       numSpan.className = 'chess-num';
       numSpan.textContent = `${moveNum}.`;
       row.appendChild(numSpan);
 
-      // Move A cell
       const cellA = document.createElement('button');
       cellA.className = 'chess-cell';
       cellA.dataset.idx = i;
@@ -803,7 +1042,6 @@ class CubeApp {
       cellA.addEventListener('click', () => this.jumpToHistoryStep(i));
       row.appendChild(cellA);
 
-      // Move B cell (or empty cell)
       if (moveB) {
         const cellB = document.createElement('button');
         cellB.className = 'chess-cell';
@@ -832,12 +1070,10 @@ class CubeApp {
       this.historyStepBadge.textContent = `Move ${this.historyPointer} / ${totalMoves}`;
     }
 
-    // Update Start row highlight
     if (this.chessRowStart) {
       this.chessRowStart.classList.toggle('active', this.historyPointer === 0);
     }
 
-    // Update cells
     const cells = this.chessTableBody ? this.chessTableBody.querySelectorAll('.chess-cell:not(.empty-cell)') : [];
     cells.forEach(cell => {
       const idx = parseInt(cell.dataset.idx, 10);
@@ -854,9 +1090,6 @@ class CubeApp {
     });
   }
 
-  /**
-   * Saves the current cube position and notation as a bookmark / checkpoint
-   */
   saveCurrentState(name) {
     const currentMovesStr = this.history.slice(1, this.historyPointer + 1).map(m => m.raw).join(' ');
     const stateName = name || `State at step ${this.historyPointer}`;
@@ -864,6 +1097,7 @@ class CubeApp {
     const newState = {
       id: 'state_' + Date.now(),
       name: stateName,
+      puzzleType: this.currentType,
       cubeSize: this.currentSize,
       stepIndex: this.historyPointer,
       notation: currentMovesStr || '(Solved Initial)',
@@ -875,7 +1109,6 @@ class CubeApp {
     this.saveStatesToStorage();
     this.renderSavedStatesList();
 
-    // Switch to Saved States tab to show user
     if (this.tabBtnStates) {
       this.tabBtnStates.click();
     }
@@ -899,10 +1132,12 @@ class CubeApp {
       const card = document.createElement('div');
       card.className = 'state-item';
 
+      const typeLabel = st.puzzleType || `${st.cubeSize}×${st.cubeSize}`;
+
       card.innerHTML = `
         <div class="state-item-header">
           <span class="state-item-name">${this.escapeHtml(st.name)}</span>
-          <span class="state-item-size">${st.cubeSize}×${st.cubeSize}</span>
+          <span class="state-item-size">${typeLabel}</span>
         </div>
         <div class="state-item-seq" title="${this.escapeHtml(st.notation)}">${this.escapeHtml(st.notation)}</div>
         <div class="state-item-meta">
@@ -939,22 +1174,22 @@ class CubeApp {
   restoreSavedState(state) {
     if (this.cube.isAnimating) return;
 
-    // If state belongs to different cube size, switch size first
-    if (state.cubeSize !== this.currentSize) {
+    const targetType = state.puzzleType || (state.cubeSize === 2 ? 'cube2' : (state.cubeSize === 4 ? 'cube4' : 'cube3'));
+    if (targetType !== this.currentType || state.cubeSize !== this.currentSize) {
       this.currentSize = state.cubeSize;
-      this.engine.setSize(state.cubeSize);
-      this.cube.setSize(state.cubeSize);
+      this.currentType = targetType;
+      this.engine.setSize(state.cubeSize, targetType);
+      this.cube.setSize(state.cubeSize, targetType);
       this.sizeButtons.forEach(b => {
-        b.classList.toggle('active', parseInt(b.dataset.size, 10) === state.cubeSize);
+        const isMatch = (b.dataset.type === targetType);
+        b.classList.toggle('active', isMatch);
       });
       this.updatePresetsDropdown();
-      this.updateKeypadForSize();
+      this.updateKeypadForPuzzle();
     }
 
-    // Restore snapshot
     this.cube.restoreSnapshot(state.snapshot);
 
-    // Reconstruct history up to this state
     this.initHistory();
     if (state.notation && state.notation !== '(Solved Initial)') {
       const parsed = this.engine.parse(state.notation);
@@ -1143,7 +1378,7 @@ class CubeApp {
     this.isPlaying = true;
     this.updatePlayPauseButton();
 
-    this.showToast(`Scrambling ${this.currentSize}×${this.currentSize}...`);
+    this.showToast(`Scrambling ${this.currentType.toUpperCase()}...`);
     await this.runPlaybackLoop();
 
     this.cube.setSpeed(prevSpeed);
@@ -1176,7 +1411,6 @@ class CubeApp {
   }
 }
 
-// Support both window global and ES module
 if (typeof window !== 'undefined') {
   window.CubeApp = CubeApp;
   window.addEventListener('DOMContentLoaded', () => {

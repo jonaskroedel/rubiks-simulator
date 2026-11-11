@@ -1,28 +1,31 @@
 /**
  * Rubik's Cube Notation Parser, Validator, and Scramble Generator
- * Supports 2x2, 3x3, and 4x4 standard WCA notation.
+ * Supports 2x2, 3x3, 4x4, Fisher Cube, Mirror Cube, and Oskar Mixup (45° slice turns).
  */
 
 class NotationEngine {
-  constructor(cubeSize = 3) {
+  constructor(cubeSize = 3, puzzleType = 'cube3') {
     this.size = cubeSize;
+    this.puzzleType = puzzleType;
   }
 
-  setSize(size) {
+  setSize(size, puzzleType = 'cube3') {
     this.size = size;
+    this.puzzleType = puzzleType;
+  }
+
+  setPuzzleType(puzzleType) {
+    this.puzzleType = puzzleType;
   }
 
   /**
    * Tokenizes and parses a notation string.
-   * Handles spaces, brackets, parentheses, comments, and standard WCA tokens.
-   * Returns: { valid: boolean, moves: Move[], error: string|null, rawTokens: string[] }
    */
   parse(input) {
     if (!input || typeof input !== 'string') {
       return { valid: true, moves: [], error: null, rawTokens: [] };
     }
 
-    // Clean input: remove parentheses, brackets, commas, quotes
     let cleaned = input
       .replace(/[()[\]{},;]/g, ' ')
       .replace(/['’`]/g, "'") // Normalize apostrophes
@@ -59,43 +62,55 @@ class NotationEngine {
   }
 
   /**
-   * Parses an individual notation token for the current cube size.
-   * Stores both semantic metadata (face, multiplier, prefix, isWide, isSlice)
-   * and default fixed-orientation parameters.
+   * Parses an individual notation token.
+   * Supports standard WCA moves, wide moves, slice moves, rotations,
+   * and Oskar Mixup 45-degree slice turns (M45, E45, S45).
    */
   parseToken(token) {
     const N = this.size;
     // Regex matches:
-    // 1: optional layer prefix number (e.g., 2 in 2R or 3 in 3Rw)
-    // 2: base face / slice / rotation: U, D, L, R, F, B, Uw, Dw, etc., or lowercase u, d, etc., or M, E, S, or x, y, z
-    // 3: suffix modifiers: ', 2, 2', etc.
-    const match = token.match(/^([1-9])?([UDLRFBxyzMESudlrfb]|(?:[UDLRFB]w))(['2]*)$/);
+    // 1: optional layer prefix number (e.g. 2 in 2R or 3 in 3Rw)
+    // 2: base face / slice / rotation
+    // 3: optional '45' for 45-degree turns (Mixup Cube)
+    // 4: suffix modifiers: ', 2, 2'
+    const match = token.match(/^([1-9])?([UDLRFBxyzMESudlrfb]|(?:[UDLRFB]w))(45)?(['2]*)$/);
     if (!match) return null;
 
     const layerPrefix = match[1] ? parseInt(match[1], 10) : null;
     let base = match[2];
-    const suffix = match[3] || '';
+    const is45 = (match[3] === '45');
+    const suffix = match[4] || '';
 
     // Validate layer prefix vs cube size
     if (layerPrefix !== null && layerPrefix > N) {
       return null;
     }
 
-    // Modifiers: multiplier for quarter turns
+    // Modifiers: multiplier for quarter turns (1 = 90 deg, 0.5 = 45 deg)
     let multiplier = 1;
-    if (suffix === "'") {
-      multiplier = -1;
-    } else if (suffix === '2' || suffix === "2'") {
-      multiplier = 2;
-    } else if (suffix === '') {
-      multiplier = 1;
+    if (is45) {
+      if (suffix === "'") {
+        multiplier = -0.5;
+      } else if (suffix === '') {
+        multiplier = 0.5;
+      } else {
+        return null;
+      }
     } else {
-      return null;
+      if (suffix === "'") {
+        multiplier = -1;
+      } else if (suffix === '2' || suffix === "2'") {
+        multiplier = 2;
+      } else if (suffix === '') {
+        multiplier = 1;
+      } else {
+        return null;
+      }
     }
 
     // Whole Cube Rotations: x, y, z
     if (base === 'x' || base === 'y' || base === 'z') {
-      if (layerPrefix !== null) return null;
+      if (layerPrefix !== null || is45) return null;
       return {
         raw: token,
         name: `${base}${suffix}`,
@@ -104,28 +119,32 @@ class NotationEngine {
         isRotation: true,
         isSlice: false,
         isWide: false,
+        is45: false,
         multiplier
       };
     }
 
-    // Slice Moves: M, E, S
+    // Slice Moves: M, E, S (valid for 3x3, Fisher, Mirror, and Mixup)
     if (base === 'M' || base === 'E' || base === 'S') {
       if (N === 2) return null; // 2x2 has no slice moves
       if (layerPrefix !== null) return null;
 
       return {
         raw: token,
-        name: `${base}${suffix}`,
+        name: token,
         baseLetter: base,
         type: 'slice',
         isRotation: false,
         isSlice: true,
         isWide: false,
+        is45,
         multiplier
       };
     }
 
     // Standard Faces & Wide moves
+    if (is45) return null; // 45 degree turns only apply to slices
+
     let isWide = false;
     if (base.endsWith('w')) {
       isWide = true;
@@ -135,7 +154,6 @@ class NotationEngine {
       base = base.toUpperCase();
     }
 
-    // Validate valid face letter
     if (!['U', 'D', 'L', 'R', 'F', 'B'].includes(base)) {
       return null;
     }
@@ -149,6 +167,7 @@ class NotationEngine {
       isRotation: false,
       isSlice: false,
       isWide,
+      is45: false,
       layerPrefix,
       multiplier
     };
@@ -178,13 +197,38 @@ class NotationEngine {
 
   generateScramble() {
     const N = this.size;
-    if (N === 2) {
+    const type = this.puzzleType;
+
+    if (type === 'mixup') {
+      return this.generateMixupScramble(18);
+    } else if (type === 'fisher' || type === 'mirror') {
+      return this.generate3x3Scramble(20);
+    } else if (N === 2) {
       return this.generate2x2Scramble(10);
     } else if (N === 4) {
-      return this.generate4x4Scramble(38);
+      return this.generate4x4Scramble(36);
     } else {
       return this.generate3x3Scramble(21);
     }
+  }
+
+  generateMixupScramble(length = 18) {
+    const moves = [];
+    const faces = ['U', 'D', 'L', 'R', 'F', 'B'];
+    const slices = ['M45', "M45'", 'E45', "E45'", 'S45', "S45'"];
+    const mods = ['', "'", '2'];
+
+    for (let i = 0; i < length; i++) {
+      if (Math.random() < 0.35) {
+        // Slice 45 degree turn
+        moves.push(slices[Math.floor(Math.random() * slices.length)]);
+      } else {
+        const face = faces[Math.floor(Math.random() * faces.length)];
+        const mod = mods[Math.floor(Math.random() * mods.length)];
+        moves.push(`${face}${mod}`);
+      }
+    }
+    return moves.join(' ');
   }
 
   generate2x2Scramble(length = 10) {
@@ -251,7 +295,6 @@ class NotationEngine {
   }
 }
 
-// Support both window global and ES module / CommonJS
 if (typeof window !== 'undefined') {
   window.NotationEngine = NotationEngine;
 }

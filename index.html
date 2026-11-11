@@ -27,15 +27,21 @@
         <span class="brand-badge">WCA Notation</span>
       </div>
 
-      <!-- Size Selector -->
+      <!-- Puzzle Selector -->
       <div class="size-selector">
-        <button class="size-btn" data-size="2">2×2 Pocket</button>
-        <button class="size-btn active" data-size="3">3×3 Standard</button>
-        <button class="size-btn" data-size="4">4×4 Revenge</button>
+        <button class="size-btn" data-type="cube2" data-size="2">2×2</button>
+        <button class="size-btn active" data-type="cube3" data-size="3">3×3</button>
+        <button class="size-btn" data-type="cube4" data-size="4">4×4</button>
+        <button class="size-btn special" data-type="fisher" data-size="3" title="Tony Fisher's 45° Shape-Mod Cube">🐟 Fisher</button>
+        <button class="size-btn special" data-type="mirror" data-size="3" title="Mirror / Bump Cube (Asymmetric Brushed Metallic)">🪞 Mirror</button>
+        <button class="size-btn special" data-type="mixup" data-size="3" title="WitEden & Oskar Mixup 3x3 (45° Slices & Edge-Center Swaps)">🔀 Mixup</button>
       </div>
 
       <!-- Action Buttons -->
       <div class="header-actions">
+        <button id="btn-toggle-designer" class="icon-btn highlight" title="Open Cube Designer & Theme Studio">
+          <span>🎨</span> Designer
+        </button>
         <button id="btn-toggle-history" class="icon-btn active" title="Toggle Move History & Saved States Sidebar">
           <span>📜</span> History <span id="header-history-count" class="badge-count">0</span>
         </button>
@@ -180,6 +186,18 @@
               <button class="key-btn" data-move="y'">y'</button>
               <button class="key-btn" data-move="z">z</button>
               <button class="key-btn" data-move="z'">z'</button>
+            </div>
+          </div>
+
+          <div class="keypad-group-row" id="keypad-row-mixup">
+            <span class="keypad-group-label" style="color: #f59e0b;">Mixup 45°:</span>
+            <div class="key-buttons">
+              <button class="key-btn mixup-btn" data-move="M45">M45</button>
+              <button class="key-btn mixup-btn" data-move="M45'">M45'</button>
+              <button class="key-btn mixup-btn" data-move="E45">E45</button>
+              <button class="key-btn mixup-btn" data-move="E45'">E45'</button>
+              <button class="key-btn mixup-btn" data-move="S45">S45</button>
+              <button class="key-btn mixup-btn" data-move="S45'">S45'</button>
             </div>
           </div>
         </div>
@@ -457,6 +475,155 @@
               <li><code>z</code> — Rotate entire cube in direction of <code>F</code> (roll clockwise)</li>
             </ul>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cube Designer & Theme Studio Modal -->
+    <div id="designer-modal" class="modal-overlay hidden">
+      <div class="modal-card designer-card">
+        <div class="modal-header">
+          <div class="designer-modal-title">
+            <span>🎨</span>
+            <h3>Cube Designer Studio</h3>
+          </div>
+          <button id="btn-close-designer" class="btn-close-modal">&times;</button>
+        </div>
+
+        <div class="designer-body">
+          <!-- Theme Presets Selection -->
+          <div class="designer-section">
+            <label class="section-title">Color Theme Presets</label>
+            <div class="preset-theme-grid">
+              <button class="theme-preset-btn active" data-preset="classic">
+                <span class="preset-preview" style="background: linear-gradient(135deg, #F7F8FA 25%, #009E48 50%, #C41230 75%, #0046AD 100%);"></span>
+                <span>WCA Classic</span>
+              </button>
+              <button class="theme-preset-btn" data-preset="cyberpunk">
+                <span class="preset-preview" style="background: linear-gradient(135deg, #f43f5e 25%, #a855f7 50%, #06b6d4 75%, #10b981 100%);"></span>
+                <span>Cyberpunk Neon</span>
+              </button>
+              <button class="theme-preset-btn" data-preset="pastel">
+                <span class="preset-preview" style="background: linear-gradient(135deg, #fca5a5 25%, #fdba74 50%, #86efac 75%, #93c5fd 100%);"></span>
+                <span>Pastel Dream</span>
+              </button>
+              <button class="theme-preset-btn" data-preset="japanese">
+                <span class="preset-preview" style="background: linear-gradient(135deg, #F7F8FA 25%, #0046AD 50%, #009E48 75%, #FFD500 100%);"></span>
+                <span>Japanese Scheme</span>
+              </button>
+              <button class="theme-preset-btn" data-preset="carbon">
+                <span class="preset-preview" style="background: linear-gradient(135deg, #1e293b 25%, #334155 50%, #0f766e 75%, #991b1b 100%);"></span>
+                <span>Carbon Stealth</span>
+              </button>
+              <button class="theme-preset-btn" data-preset="silver">
+                <span class="preset-preview" style="background: linear-gradient(135deg, #cbd5e1 25%, #94a3b8 50%, #e2e8f0 75%, #64748b 100%);"></span>
+                <span>Mirror Silver</span>
+              </button>
+              <button class="theme-preset-btn" data-preset="gold">
+                <span class="preset-preview" style="background: linear-gradient(135deg, #fef08a 25%, #f59e0b 50%, #d97706 75%, #fbbf24 100%);"></span>
+                <span>Mirror Gold</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 6 Individual Face Color Pickers -->
+          <div class="designer-section">
+            <label class="section-title">Face Colors (Custom Palette)</label>
+            <div class="face-picker-grid">
+              <div class="face-picker-card">
+                <span class="picker-label">U (Top)</span>
+                <input type="color" id="picker-color-U" class="color-picker-input" value="#F7F8FA" />
+                <span id="hex-U" class="hex-text">#F7F8FA</span>
+              </div>
+              <div class="face-picker-card">
+                <span class="picker-label">D (Bottom)</span>
+                <input type="color" id="picker-color-D" class="color-picker-input" value="#FFD500" />
+                <span id="hex-D" class="hex-text">#FFD500</span>
+              </div>
+              <div class="face-picker-card">
+                <span class="picker-label">F (Front)</span>
+                <input type="color" id="picker-color-F" class="color-picker-input" value="#009E48" />
+                <span id="hex-F" class="hex-text">#009E48</span>
+              </div>
+              <div class="face-picker-card">
+                <span class="picker-label">B (Back)</span>
+                <input type="color" id="picker-color-B" class="color-picker-input" value="#0046AD" />
+                <span id="hex-B" class="hex-text">#0046AD</span>
+              </div>
+              <div class="face-picker-card">
+                <span class="picker-label">R (Right)</span>
+                <input type="color" id="picker-color-R" class="color-picker-input" value="#C41230" />
+                <span id="hex-R" class="hex-text">#C41230</span>
+              </div>
+              <div class="face-picker-card">
+                <span class="picker-label">L (Left)</span>
+                <input type="color" id="picker-color-L" class="color-picker-input" value="#FF5500" />
+                <span id="hex-L" class="hex-text">#FF5500</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Body Plastic Core Color -->
+          <div class="designer-section">
+            <label class="section-title">Plastic Core & Border Color</label>
+            <div class="body-color-row">
+              <input type="color" id="picker-color-body" class="color-picker-input" value="#121316" />
+              <div class="body-preset-pills">
+                <button class="body-preset-pill active" data-color="#121316">⚫ Obsidian Black</button>
+                <button class="body-preset-pill" data-color="#f8f9fa">⚪ Arctic White</button>
+                <button class="body-preset-pill" data-color="#334155">🔘 Slate Titanium</button>
+                <button class="body-preset-pill" data-color="#ffd700">🟡 Gold Core</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sticker Styling & Shape Sliders -->
+          <div class="designer-section">
+            <label class="section-title">Sticker Geometry & Finish</label>
+            <div class="designer-sliders-grid">
+              <div class="slider-field">
+                <div class="slider-header">
+                  <span>Corner Rounding</span>
+                  <span id="val-radius" class="slider-val">24px</span>
+                </div>
+                <input type="range" id="slider-radius" min="0" max="42" step="2" value="24" />
+              </div>
+
+              <div class="slider-field">
+                <div class="slider-header">
+                  <span>Border Padding (Margin)</span>
+                  <span id="val-padding" class="slider-val">16px</span>
+                </div>
+                <input type="range" id="slider-padding" min="4" max="28" step="2" value="16" />
+              </div>
+
+              <div class="slider-field">
+                <div class="slider-header">
+                  <span>Finish / Roughness</span>
+                  <span id="val-roughness" class="slider-val">Matte (28%)</span>
+                </div>
+                <input type="range" id="slider-roughness" min="0.05" max="0.95" step="0.05" value="0.28" />
+              </div>
+
+              <div class="slider-field">
+                <div class="slider-header">
+                  <span>Metallic Specular</span>
+                  <span id="val-metalness" class="slider-val">Plastic (4%)</span>
+                </div>
+                <input type="range" id="slider-metalness" min="0.0" max="1.0" step="0.05" value="0.04" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="designer-footer">
+          <div class="designer-footer-left">
+            <button id="btn-reset-theme" class="util-btn">Reset Defaults</button>
+            <button id="btn-export-theme" class="util-btn">Export Theme</button>
+          </div>
+          <button id="btn-apply-designer" class="btn-save-confirm" style="padding: 8px 20px; font-size: 13px;">
+            Apply & Close
+          </button>
         </div>
       </div>
     </div>

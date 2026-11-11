@@ -1,25 +1,43 @@
 /**
  * Rubik's Cube 3D Simulation Engine using Three.js
- * Handles 2x2, 3x3, and 4x4 visual rendering, realistic materials,
- * smooth face rotations, camera controls, and dynamic view-relative notation.
+ * Supports 2x2, 3x3, 4x4, Fisher Cube (Tony Fisher 45° shape-mod),
+ * Mirror / Bump Cube (asymmetric shape-mod), and WitEden & Oskar Mixup 3x3 (45° slice turns).
+ * Includes complete Cube Designer and Theme Customizer.
  */
 
 class RubiksCube3D {
-  constructor(containerElement, initialSize = 3) {
+  constructor(containerElement, initialSize = 3, initialType = 'cube3') {
     this.container = containerElement;
     this.size = initialSize;
+    this.puzzleType = initialType; // 'cube2', 'cube3', 'cube4', 'fisher', 'mirror', 'mixup'
     this.cubies = [];
     this.isAnimating = false;
-    this.animationDuration = 220; // Default ms per move
-    this.viewMode = 'relative'; // 'relative' (dynamic to camera view) or 'fixed' (standard WCA)
+    this.animationDuration = 220;
+    this.viewMode = 'relative';
 
     this.onOrientationChangeCallback = null;
     this.lastOrientationKey = '';
 
+    // Active Theme / Designer Configuration
+    this.theme = this.loadThemeFromStorage() || {
+      name: 'WCA Classic',
+      U: '#F7F8FA', // White
+      D: '#FFD500', // Yellow
+      F: '#009E48', // Green
+      B: '#0046AD', // Blue
+      R: '#C41230', // Red
+      L: '#FF5500', // Orange
+      body: '#121316', // Core plastic
+      radius: 24,
+      padding: 16,
+      roughness: 0.28,
+      metalness: 0.04
+    };
+
     this.initThree();
     this.initTriads();
     this.initStickerMaterials();
-    this.buildCube(this.size);
+    this.buildPuzzle(this.size, this.puzzleType);
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
 
@@ -27,15 +45,12 @@ class RubiksCube3D {
   }
 
   initThree() {
-    // Scene
     this.scene = new THREE.Scene();
 
-    // Camera
     const aspect = this.container.clientWidth / this.container.clientHeight;
     this.camera = new THREE.PerspectiveCamera(42, aspect, 0.1, 100);
     this.updateCameraForSize(this.size);
 
-    // Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -43,16 +58,14 @@ class RubiksCube3D {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    // Orbit Controls - strictly for rotating the camera/view around the cube
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.enablePan = false; // Keep the cube centered
+    this.controls.enablePan = false;
     this.controls.minDistance = 3.5;
-    this.controls.maxDistance = 22;
+    this.controls.maxDistance = 24;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
     this.scene.add(ambientLight);
 
     const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -60,8 +73,6 @@ class RubiksCube3D {
     dirLight1.castShadow = true;
     dirLight1.shadow.mapSize.width = 1024;
     dirLight1.shadow.mapSize.height = 1024;
-    dirLight1.shadow.camera.near = 0.5;
-    dirLight1.shadow.camera.far = 40;
     this.scene.add(dirLight1);
 
     const dirLight2 = new THREE.DirectionalLight(0xb0c4de, 0.45);
@@ -71,29 +82,23 @@ class RubiksCube3D {
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x222233, 0.35);
     this.scene.add(hemiLight);
 
-    // Cube group and pivot group
     this.cubeGroup = new THREE.Group();
     this.scene.add(this.cubeGroup);
 
     this.pivotGroup = new THREE.Group();
     this.scene.add(this.pivotGroup);
 
-    // Soft floor shadow disc
     this.initShadowFloor();
   }
 
-  /**
-   * Pre-generates the 24 valid right-handed orthogonal triads
-   * for mapping view orientation to cube axes.
-   */
   initTriads() {
     this.faceDefinitions = [
-      { id: '+X', color: 'Red',    colorHex: '#C41230', vec: new THREE.Vector3(1, 0, 0),  axis: 'x', sign: 1 },
-      { id: '-X', color: 'Orange', colorHex: '#FF5500', vec: new THREE.Vector3(-1, 0, 0), axis: 'x', sign: -1 },
-      { id: '+Y', color: 'White',  colorHex: '#F7F8FA', vec: new THREE.Vector3(0, 1, 0),  axis: 'y', sign: 1 },
-      { id: '-Y', color: 'Yellow', colorHex: '#FFD500', vec: new THREE.Vector3(0, -1, 0), axis: 'y', sign: -1 },
-      { id: '+Z', color: 'Green',  colorHex: '#009E48', vec: new THREE.Vector3(0, 0, 1),  axis: 'z', sign: 1 },
-      { id: '-Z', color: 'Blue',   colorHex: '#0046AD', vec: new THREE.Vector3(0, 0, -1), axis: 'z', sign: -1 }
+      { id: '+X', color: 'Red',    colorHex: this.theme.R, vec: new THREE.Vector3(1, 0, 0),  axis: 'x', sign: 1 },
+      { id: '-X', color: 'Orange', colorHex: this.theme.L, vec: new THREE.Vector3(-1, 0, 0), axis: 'x', sign: -1 },
+      { id: '+Y', color: 'White',  colorHex: this.theme.U, vec: new THREE.Vector3(0, 1, 0),  axis: 'y', sign: 1 },
+      { id: '-Y', color: 'Yellow', colorHex: this.theme.D, vec: new THREE.Vector3(0, -1, 0), axis: 'y', sign: -1 },
+      { id: '+Z', color: 'Green',  colorHex: this.theme.F, vec: new THREE.Vector3(0, 0, 1),  axis: 'z', sign: 1 },
+      { id: '-Z', color: 'Blue',   colorHex: this.theme.B, vec: new THREE.Vector3(0, 0, -1), axis: 'z', sign: -1 }
     ];
 
     this.triads = [];
@@ -107,12 +112,7 @@ class RubiksCube3D {
           const l = this.faceDefinitions.find(a => a.vec.x === -r.vec.x && a.vec.y === -r.vec.y && a.vec.z === -r.vec.z);
 
           this.triads.push({
-            U: u,
-            D: d,
-            F: f,
-            B: b,
-            R: r,
-            L: l,
+            U: u, D: d, F: f, B: b, R: r, L: l,
             key: `${f.id}_${r.id}_${u.id}`
           });
         }
@@ -120,13 +120,8 @@ class RubiksCube3D {
     }
   }
 
-  /**
-   * Computes the current view-relative orientation triad based on camera orientation
-   */
   getCurrentOrientation() {
     if (this.viewMode === 'fixed') {
-      // Fixed standard WCA orientation:
-      // F = +Z (Green), B = -Z (Blue), R = +X (Red), L = -X (Orange), U = +Y (White), D = -Y (Yellow)
       return {
         U: this.faceDefinitions.find(f => f.id === '+Y'),
         D: this.faceDefinitions.find(f => f.id === '-Y'),
@@ -138,8 +133,7 @@ class RubiksCube3D {
       };
     }
 
-    // Camera vectors in world coordinates
-    const camFront = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion); // points from target to camera
+    const camFront = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion);
     const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
     const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
 
@@ -148,10 +142,6 @@ class RubiksCube3D {
 
     for (let i = 0; i < this.triads.length; i++) {
       const t = this.triads[i];
-      // Weighted alignment score:
-      // F should face camera (camFront)
-      // U should point to screen top (camUp)
-      // R should point to screen right (camRight)
       const score = (t.F.vec.dot(camFront) * 1.5) +
                     (t.U.vec.dot(camUp) * 1.2) +
                     (t.R.vec.dot(camRight) * 1.0);
@@ -211,7 +201,10 @@ class RubiksCube3D {
 
   updateCameraForSize(size) {
     const distMap = { 2: 6.2, 3: 7.8, 4: 9.6 };
-    const dist = distMap[size] || 8.0;
+    let dist = distMap[size] || 8.0;
+    if (this.puzzleType === 'mirror' || this.puzzleType === 'fisher') {
+      dist = 8.5;
+    }
     this.camera.position.set(dist * 0.75, dist * 0.65, dist * 0.95);
     this.camera.lookAt(0, 0, 0);
     if (this.controls) {
@@ -219,40 +212,43 @@ class RubiksCube3D {
       this.controls.update();
     }
     if (this.shadowMesh) {
-      this.shadowMesh.position.y = - (size * 0.5 + 1.2);
+      this.shadowMesh.position.y = - (size * 0.5 + 1.25);
       const scale = size / 3;
       this.shadowMesh.scale.set(scale, scale, 1);
     }
   }
 
-  createStickerTexture(fillColor) {
+  /**
+   * Generates realistic speedcube sticker textures using HTML5 canvas
+   */
+  createStickerTexture(fillColor, options = {}) {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
 
-    // Dark black plastic border
-    ctx.fillStyle = '#121316';
+    const bodyColor = options.body || this.theme.body || '#121316';
+    const pad = options.padding !== undefined ? options.padding : this.theme.padding;
+    const rad = options.radius !== undefined ? options.radius : this.theme.radius;
+    const size = 256 - pad * 2;
+
+    // Body plastic border
+    ctx.fillStyle = bodyColor;
     ctx.fillRect(0, 0, 256, 256);
 
     // Inner rounded sticker
-    const pad = 16;
-    const size = 256 - pad * 2;
-    const rad = 24;
-
     ctx.beginPath();
-    ctx.roundRect(pad, pad, size, size, rad);
+    ctx.roundRect(pad, pad, size, size, Math.max(0, rad));
     ctx.fillStyle = fillColor;
     ctx.fill();
 
-    // Subtle gloss / bevel reflection on top edge
+    // Subtle bevel reflection on top edge
     const glossGrad = ctx.createLinearGradient(pad, pad, pad, pad + size * 0.45);
     glossGrad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
     glossGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
     ctx.fillStyle = glossGrad;
     ctx.fill();
 
-    // Subtle dark border outline for depth
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
     ctx.lineWidth = 4;
     ctx.stroke();
@@ -263,56 +259,71 @@ class RubiksCube3D {
   }
 
   initStickerMaterials() {
-    const colors = {
-      R: '#C41230', // Right: Red
-      L: '#FF5500', // Left: Orange
-      U: '#F7F8FA', // Up: White
-      D: '#FFD500', // Down: Yellow
-      F: '#009E48', // Front: Green
-      B: '#0046AD'  // Back: Blue
-    };
+    const th = this.theme;
+    const rough = th.roughness !== undefined ? th.roughness : 0.28;
+    const metal = th.metalness !== undefined ? th.metalness : 0.04;
 
     this.materials = {
-      R: new THREE.MeshStandardMaterial({
-        map: this.createStickerTexture(colors.R),
-        roughness: 0.28,
-        metalness: 0.04
-      }),
-      L: new THREE.MeshStandardMaterial({
-        map: this.createStickerTexture(colors.L),
-        roughness: 0.28,
-        metalness: 0.04
-      }),
-      U: new THREE.MeshStandardMaterial({
-        map: this.createStickerTexture(colors.U),
-        roughness: 0.28,
-        metalness: 0.04
-      }),
-      D: new THREE.MeshStandardMaterial({
-        map: this.createStickerTexture(colors.D),
-        roughness: 0.28,
-        metalness: 0.04
-      }),
-      F: new THREE.MeshStandardMaterial({
-        map: this.createStickerTexture(colors.F),
-        roughness: 0.28,
-        metalness: 0.04
-      }),
-      B: new THREE.MeshStandardMaterial({
-        map: this.createStickerTexture(colors.B),
-        roughness: 0.28,
-        metalness: 0.04
-      }),
-      inner: new THREE.MeshStandardMaterial({
-        color: 0x121316,
-        roughness: 0.85,
-        metalness: 0.02
-      })
+      R: new THREE.MeshStandardMaterial({ map: this.createStickerTexture(th.R), roughness: rough, metalness: metal }),
+      L: new THREE.MeshStandardMaterial({ map: this.createStickerTexture(th.L), roughness: rough, metalness: metal }),
+      U: new THREE.MeshStandardMaterial({ map: this.createStickerTexture(th.U), roughness: rough, metalness: metal }),
+      D: new THREE.MeshStandardMaterial({ map: this.createStickerTexture(th.D), roughness: rough, metalness: metal }),
+      F: new THREE.MeshStandardMaterial({ map: this.createStickerTexture(th.F), roughness: rough, metalness: metal }),
+      B: new THREE.MeshStandardMaterial({ map: this.createStickerTexture(th.B), roughness: rough, metalness: metal }),
+      inner: new THREE.MeshStandardMaterial({ color: new THREE.Color(th.body), roughness: 0.85, metalness: 0.02 })
     };
+
+    // Mirror Cube Brushed Metallic Material
+    this.materials.mirror = new THREE.MeshStandardMaterial({
+      color: 0xdde2ea,
+      roughness: 0.18,
+      metalness: 0.88
+    });
   }
 
-  buildCube(size) {
+  /**
+   * Re-applies a custom theme from Cube Designer
+   */
+  applyTheme(newTheme) {
+    this.theme = Object.assign(this.theme, newTheme);
+    this.saveThemeToStorage();
+    this.initTriads();
+    this.initStickerMaterials();
+
+    // Refresh materials on existing cubies
+    if (this.puzzleType === 'mirror') {
+      const col = new THREE.Color(this.theme.U || '#dde2ea');
+      this.materials.mirror.color.copy(col);
+    } else {
+      this.buildPuzzle(this.size, this.puzzleType);
+    }
+
+    this.checkOrientationUpdate(true);
+  }
+
+  saveThemeToStorage() {
+    try {
+      localStorage.setItem('cubesim_theme', JSON.stringify(this.theme));
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+
+  loadThemeFromStorage() {
+    try {
+      const raw = localStorage.getItem('cubesim_theme');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Main builder that dispatches to specific puzzle generator
+   */
+  buildPuzzle(size, type = 'cube3') {
     this.size = size;
+    this.puzzleType = type;
 
     while (this.cubeGroup.children.length > 0) {
       const obj = this.cubeGroup.children[0];
@@ -321,6 +332,24 @@ class RubiksCube3D {
     }
     this.cubies = [];
 
+    if (type === 'mirror') {
+      this.buildMirrorCube();
+    } else if (type === 'fisher') {
+      this.buildFisherCube();
+    } else if (type === 'mixup') {
+      this.buildMixupCube();
+    } else {
+      this.buildStandardCube(size);
+    }
+
+    this.updateCameraForSize(size);
+    this.checkOrientationUpdate(true);
+  }
+
+  /**
+   * Builds Standard 2x2, 3x3, or 4x4 Cube
+   */
+  buildStandardCube(size) {
     const N = size;
     const cubieSize = 0.96;
     const spacing = 1.0;
@@ -334,12 +363,12 @@ class RubiksCube3D {
           if (!isExterior) continue;
 
           const mats = [
-            x === N - 1 ? this.materials.R : this.materials.inner, // +X: Right
-            x === 0     ? this.materials.L : this.materials.inner, // -X: Left
-            y === N - 1 ? this.materials.U : this.materials.inner, // +Y: Up
-            y === 0     ? this.materials.D : this.materials.inner, // -Y: Down
-            z === N - 1 ? this.materials.F : this.materials.inner, // +Z: Front
-            z === 0     ? this.materials.B : this.materials.inner  // -Z: Back
+            x === N - 1 ? this.materials.R : this.materials.inner,
+            x === 0     ? this.materials.L : this.materials.inner,
+            y === N - 1 ? this.materials.U : this.materials.inner,
+            y === 0     ? this.materials.D : this.materials.inner,
+            z === N - 1 ? this.materials.F : this.materials.inner,
+            z === 0     ? this.materials.B : this.materials.inner
           ];
 
           const cubie = new THREE.Mesh(cubieGeo, mats);
@@ -358,18 +387,226 @@ class RubiksCube3D {
         }
       }
     }
-
-    this.updateCameraForSize(size);
-    this.checkOrientationUpdate(true);
-  }
-
-  reset() {
-    this.buildCube(this.size);
   }
 
   /**
-   * Captures an exact snapshot of the positions and orientations of all cubies
+   * Builds the Mirror / Bump Cube (Shape-mod with unequal layer thicknesses)
    */
+  buildMirrorCube() {
+    this.size = 3;
+    const Tx = [0.65, 1.0, 1.35];
+    const Ty = [0.75, 1.0, 1.25];
+    const Tz = [0.85, 1.0, 1.15];
+
+    // Offsets to center the full 3.0 cube at (0, 0, 0)
+    const Cx = [-1.5 + 0.325, -1.5 + 0.65 + 0.5, -1.5 + 1.65 + 0.675];
+    const Cy = [-1.5 + 0.375, -1.5 + 0.75 + 0.5, -1.5 + 1.75 + 0.625];
+    const Cz = [-1.5 + 0.425, -1.5 + 0.85 + 0.5, -1.5 + 1.85 + 0.575];
+
+    const mirrorMat = this.materials.mirror;
+
+    for (let x = 0; x < 3; x++) {
+      for (let y = 0; y < 3; y++) {
+        for (let z = 0; z < 3; z++) {
+          const isExterior = (x === 0 || x === 2 || y === 0 || y === 2 || z === 0 || z === 2);
+          if (!isExterior) continue;
+
+          const w = Tx[x] - 0.04;
+          const h = Ty[y] - 0.04;
+          const d = Tz[z] - 0.04;
+          const geo = new THREE.BoxGeometry(w, h, d);
+
+          const cubie = new THREE.Mesh(geo, mirrorMat);
+          cubie.castShadow = true;
+          cubie.receiveShadow = true;
+
+          cubie.position.set(Cx[x], Cy[y], Cz[z]);
+          cubie.userData = { initialX: x, initialY: y, initialZ: z, isMirror: true };
+
+          this.cubeGroup.add(cubie);
+          this.cubies.push(cubie);
+        }
+      }
+    }
+  }
+
+  /**
+   * Builds the Fisher Cube (Tony Fisher's 45° vertical shape-mod)
+   */
+  buildFisherCube() {
+    this.size = 3;
+    const L = 1.5 * Math.SQRT2; // ~2.1213
+    const h = 0.5;
+
+    // Build the 9 XZ-plane 2D polygon cross sections
+    const getPolygonForCell = (i, k) => {
+      const shape = new THREE.Shape();
+
+      if (i === 0 && k === 0) {
+        // Center: square
+        shape.moveTo(-h, -h);
+        shape.lineTo(h, -h);
+        shape.lineTo(h, h);
+        shape.lineTo(-h, h);
+        shape.closePath();
+      } else if (i === 1 && k === 0) {
+        // Right edge (pentagon corner pointing along +X)
+        shape.moveTo(h, -h);
+        shape.lineTo(h, h);
+        shape.lineTo(L - h, h);
+        shape.lineTo(L, 0);
+        shape.lineTo(L - h, -h);
+        shape.closePath();
+      } else if (i === -1 && k === 0) {
+        // Left edge (pentagon corner pointing along -X)
+        shape.moveTo(-h, h);
+        shape.lineTo(-h, -h);
+        shape.lineTo(-L + h, -h);
+        shape.lineTo(-L, 0);
+        shape.lineTo(-L + h, h);
+        shape.closePath();
+      } else if (i === 0 && k === 1) {
+        // Front edge (pentagon corner pointing along +Z)
+        shape.moveTo(-h, h);
+        shape.lineTo(h, h);
+        shape.lineTo(h, L - h);
+        shape.lineTo(0, L);
+        shape.lineTo(-h, L - h);
+        shape.closePath();
+      } else if (i === 0 && k === -1) {
+        // Back edge (pentagon corner pointing along -Z)
+        shape.moveTo(h, -h);
+        shape.lineTo(-h, -h);
+        shape.lineTo(-h, -L + h);
+        shape.lineTo(0, -L);
+        shape.lineTo(h, -L + h);
+        shape.closePath();
+      } else if (i === 1 && k === 1) {
+        // Corner (1, 1): right triangle with flat diagonal exterior
+        shape.moveTo(h, h);
+        shape.lineTo(L - h, h);
+        shape.lineTo(h, L - h);
+        shape.closePath();
+      } else if (i === -1 && k === 1) {
+        // Corner (-1, 1)
+        shape.moveTo(-h, h);
+        shape.lineTo(-h, L - h);
+        shape.lineTo(-L + h, h);
+        shape.closePath();
+      } else if (i === -1 && k === -1) {
+        // Corner (-1, -1)
+        shape.moveTo(-h, -h);
+        shape.lineTo(-L + h, -h);
+        shape.lineTo(-h, -L + h);
+        shape.closePath();
+      } else if (i === 1 && k === -1) {
+        // Corner (1, -1)
+        shape.moveTo(h, -h);
+        shape.lineTo(h, -L + h);
+        shape.lineTo(L - h, -h);
+        shape.closePath();
+      }
+      return shape;
+    };
+
+    const extrudeSettings = {
+      depth: 0.96,
+      bevelEnabled: true,
+      bevelSegments: 2,
+      steps: 1,
+      bevelSize: 0.02,
+      bevelThickness: 0.02
+    };
+
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        for (let z = -1; z <= 1; z++) {
+          const isExterior = (x !== 0 || y !== 0 || z !== 0);
+          if (!isExterior) continue;
+
+          const polyShape = getPolygonForCell(x, z);
+          const geo = new THREE.ExtrudeGeometry(polyShape, extrudeSettings);
+          // Rotate extrusion to align depth with Y axis
+          geo.center();
+
+          // Appropriate materials for top/bottom vs sides
+          const mats = [
+            (y === 1) ? this.materials.U : (y === -1 ? this.materials.D : this.materials.inner),
+            (x === 1) ? this.materials.R : (x === -1 ? this.materials.L : (z === 1 ? this.materials.F : this.materials.B))
+          ];
+
+          const cubie = new THREE.Mesh(geo, mats);
+          cubie.castShadow = true;
+          cubie.receiveShadow = true;
+
+          // Position at y layer
+          cubie.position.set(0, y * 1.0, 0);
+          cubie.userData = { initialX: x + 1, initialY: y + 1, initialZ: z + 1, isFisher: true };
+
+          this.cubeGroup.add(cubie);
+          this.cubies.push(cubie);
+        }
+      }
+    }
+  }
+
+  /**
+   * Builds the WitEden & Oskar Mixup 3x3 (Chamfered pieces enabling 45° slice swaps)
+   */
+  buildMixupCube() {
+    this.size = 3;
+    const cubieSize = 0.96;
+    const spacing = 1.0;
+    const offset = 1;
+    const cubieGeo = new THREE.BoxGeometry(cubieSize, cubieSize, cubieSize);
+
+    for (let x = 0; x < 3; x++) {
+      for (let y = 0; y < 3; y++) {
+        for (let z = 0; z < 3; z++) {
+          const isExterior = (x === 0 || x === 2 || y === 0 || y === 2 || z === 0 || z === 2);
+          if (!isExterior) continue;
+
+          const mats = [
+            x === 2 ? this.materials.R : this.materials.inner,
+            x === 0 ? this.materials.L : this.materials.inner,
+            y === 2 ? this.materials.U : this.materials.inner,
+            y === 0 ? this.materials.D : this.materials.inner,
+            z === 2 ? this.materials.F : this.materials.inner,
+            z === 0 ? this.materials.B : this.materials.inner
+          ];
+
+          const cubie = new THREE.Mesh(cubieGeo, mats);
+          cubie.castShadow = true;
+          cubie.receiveShadow = true;
+
+          cubie.position.set(
+            (x - offset) * spacing,
+            (y - offset) * spacing,
+            (z - offset) * spacing
+          );
+
+          cubie.userData = { initialX: x, initialY: y, initialZ: z, isMixup: true };
+          this.cubeGroup.add(cubie);
+          this.cubies.push(cubie);
+        }
+      }
+    }
+  }
+
+  reset() {
+    this.buildPuzzle(this.size, this.puzzleType);
+  }
+
+  setSize(newSize, puzzleType = 'cube3') {
+    this.size = newSize;
+    this.puzzleType = puzzleType;
+    this.buildPuzzle(newSize, puzzleType);
+  }
+
+  setSpeed(durationMs) {
+    this.animationDuration = durationMs;
+  }
+
   saveSnapshot() {
     return this.cubies.map(cubie => ({
       pos: { x: cubie.position.x, y: cubie.position.y, z: cubie.position.z },
@@ -377,15 +614,11 @@ class RubiksCube3D {
     }));
   }
 
-  /**
-   * Instantly restores all cubies to a previously saved snapshot
-   */
   restoreSnapshot(snapshot) {
     if (!snapshot || snapshot.length !== this.cubies.length) {
       return false;
     }
 
-    // Ensure pivot is clean and cubies belong to cubeGroup
     this.pivotGroup.rotation.set(0, 0, 0);
     this.isAnimating = false;
 
@@ -403,19 +636,6 @@ class RubiksCube3D {
     return true;
   }
 
-  setSize(newSize) {
-    if (newSize === this.size) return;
-    this.buildCube(newSize);
-  }
-
-  setSpeed(durationMs) {
-    this.animationDuration = durationMs;
-  }
-
-  /**
-   * Resolves a semantic move into the physical axis, layers, and angle
-   * based on the current view orientation (relative vs fixed).
-   */
   resolveMove(move) {
     const orientation = this.getCurrentOrientation();
     const N = this.size;
@@ -440,13 +660,13 @@ class RubiksCube3D {
       };
     }
 
-    // Slice Moves (M, E, S)
+    // Slice Moves (M, E, S) - supports 45° (mult = 0.5) for Mixup Cube!
     if (move.isSlice) {
       const base = move.baseLetter;
       let targetFace = orientation.L;
-      if (base === 'M') targetFace = orientation.L; // M follows L
-      else if (base === 'E') targetFace = orientation.D; // E follows D
-      else if (base === 'S') targetFace = orientation.F; // S follows F
+      if (base === 'M') targetFace = orientation.L;
+      else if (base === 'E') targetFace = orientation.D;
+      else if (base === 'S') targetFace = orientation.F;
 
       const layers = (N === 3) ? [1] : [1, 2];
       const angle = (-targetFace.sign * (Math.PI / 2)) * mult;
@@ -502,20 +722,16 @@ class RubiksCube3D {
     };
   }
 
-  /**
-   * Executes a parsed move dynamically resolved to current camera orientation.
-   */
   async executeMove(rawMove) {
     if (this.isAnimating) {
       throw new Error('Another move is currently animating.');
     }
 
-    // Dynamically resolve physical rotation parameters from camera view
     const resolved = this.resolveMove(rawMove);
     const { axis, layers, angle } = resolved;
     const N = this.size;
     const offset = (N - 1) / 2;
-    const threshold = 0.25;
+    const threshold = 0.35; // slightly wider threshold for shape-mods
 
     const selectedCubies = this.cubies.filter(cubie => {
       const coord = cubie.position[axis];
@@ -582,9 +798,12 @@ class RubiksCube3D {
     selectedCubies.forEach(cubie => {
       this.cubeGroup.attach(cubie);
 
-      cubie.position.x = Math.round(cubie.position.x + offset) - offset;
-      cubie.position.y = Math.round(cubie.position.y + offset) - offset;
-      cubie.position.z = Math.round(cubie.position.z + offset) - offset;
+      // Snap coordinates (Mirror and Fisher cubes preserve their relative offsets)
+      if (!cubie.userData.isMirror && !cubie.userData.isFisher) {
+        cubie.position.x = Math.round(cubie.position.x + offset) - offset;
+        cubie.position.y = Math.round(cubie.position.y + offset) - offset;
+        cubie.position.z = Math.round(cubie.position.z + offset) - offset;
+      }
 
       this.snapOrientation(cubie);
     });
@@ -593,6 +812,17 @@ class RubiksCube3D {
   }
 
   snapOrientation(cubie) {
+    // If Mixup puzzle, allow 45° snapping
+    if (this.puzzleType === 'mixup') {
+      const euler = new THREE.Euler().setFromQuaternion(cubie.quaternion, 'XYZ');
+      const snapAngle = (a) => Math.round(a / (Math.PI / 4)) * (Math.PI / 4);
+      euler.x = snapAngle(euler.x);
+      euler.y = snapAngle(euler.y);
+      euler.z = snapAngle(euler.z);
+      cubie.quaternion.setFromEuler(euler);
+      return;
+    }
+
     const mat = new THREE.Matrix4().makeRotationFromQuaternion(cubie.quaternion);
     const e = mat.elements;
 
@@ -624,7 +854,10 @@ class RubiksCube3D {
 
   setCameraPreset(preset) {
     const distMap = { 2: 6.2, 3: 7.8, 4: 9.6 };
-    const dist = distMap[this.size] || 8.0;
+    let dist = distMap[this.size] || 8.0;
+    if (this.puzzleType === 'mirror' || this.puzzleType === 'fisher') {
+      dist = 8.5;
+    }
 
     const targets = {
       isometric: { x: dist * 0.75, y: dist * 0.65, z: dist * 0.95 },
