@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rubik's Cube Simulator 3D (2x2, 3x3, 4x4)</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Three.js and OrbitControls UMD -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <div id="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon">🧊</span>
+        <span class="brand-title">CubeSim 3D</span>
+        <span class="brand-badge">WCA Notation</span>
+      </div>
+
+      <!-- Size Selector -->
+      <div class="size-selector">
+        <button class="size-btn" data-size="2">2×2 Pocket</button>
+        <button class="size-btn active" data-size="3">3×3 Standard</button>
+        <button class="size-btn" data-size="4">4×4 Revenge</button>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="header-actions">
+        <button id="btn-toggle-history" class="icon-btn active" title="Toggle Move History & Saved States Sidebar">
+          <span>📜</span> History <span id="header-history-count" class="badge-count">0</span>
+        </button>
+        <button id="btn-toggle-keypad" class="icon-btn" title="Toggle Virtual Notation Keypad">
+          <span>⌨️</span> Keypad
+        </button>
+        <button id="btn-toggle-help" class="icon-btn" title="View Notation Cheat Sheet">
+          <span>❓</span> Guide
+        </button>
+        <button id="btn-reset-cam" class="icon-btn" title="Reset View Angle">
+          <span>🎯</span> Reset Cam
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Area -->
+    <div class="workspace-area">
+      <!-- Left / Center: 3D Stage & Control Dock -->
+      <div class="cube-stage">
+        <!-- 3D Canvas Viewport -->
+        <main id="canvas-container">
+          <div class="viewport-hint">
+            <span>🖱️ Drag to rotate view</span>
+            <span>•</span>
+            <span>📜 Scroll to zoom</span>
+            <span>•</span>
+            <span>Type notation below to turn faces</span>
+          </div>
+
+          <!-- Camera Presets Bar -->
+          <div class="cam-presets-bar">
+            <button class="cam-preset-btn" data-cam="isometric" title="Isometric Perspective">Iso</button>
+            <button class="cam-preset-btn" data-cam="front" title="View Front (Green)">Front</button>
+            <button class="cam-preset-btn" data-cam="right" title="View Right (Red)">Right</button>
+            <button class="cam-preset-btn" data-cam="top" title="View Top (White)">Top</button>
+            <button class="cam-preset-btn" data-cam="back" title="View Back (Blue)">Back</button>
+            <button class="cam-preset-btn" data-cam="left" title="View Left (Orange)">Left</button>
+          </div>
+
+          <!-- Dynamic View Orientation HUD -->
+          <div id="view-orientation-hud" class="orientation-hud">
+            <button id="btn-toggle-view-mode" class="hud-mode-badge" title="Click to toggle between View-Relative and Fixed WCA notation">
+              <span class="mode-icon">👁️</span>
+              <span id="mode-text">View-Relative</span>
+            </button>
+            <div class="hud-face-pills">
+              <div class="face-pill" id="pill-F" title="Front face (facing you)">
+                <span class="pill-letter">F:</span>
+                <span class="pill-dot" style="background:#009E48;"></span>
+                <span class="pill-color" id="pill-color-F">Green</span>
+              </div>
+              <div class="face-pill" id="pill-R" title="Right face (to your right)">
+                <span class="pill-letter">R:</span>
+                <span class="pill-dot" style="background:#C41230;"></span>
+                <span class="pill-color" id="pill-color-R">Red</span>
+              </div>
+              <div class="face-pill" id="pill-U" title="Up face (top)">
+                <span class="pill-letter">U:</span>
+                <span class="pill-dot" style="background:#F7F8FA;"></span>
+                <span class="pill-color" id="pill-color-U">White</span>
+              </div>
+              <div class="face-pill" id="pill-L" title="Left face (to your left)">
+                <span class="pill-letter">L:</span>
+                <span class="pill-dot" style="background:#FF5500;"></span>
+                <span class="pill-color" id="pill-color-L">Orange</span>
+              </div>
+              <div class="face-pill" id="pill-B" title="Back face (behind you)">
+                <span class="pill-letter">B:</span>
+                <span class="pill-dot" style="background:#0046AD;"></span>
+                <span class="pill-color" id="pill-color-B">Blue</span>
+              </div>
+              <div class="face-pill" id="pill-D" title="Down face (bottom)">
+                <span class="pill-letter">D:</span>
+                <span class="pill-dot" style="background:#FFD500;"></span>
+                <span class="pill-color" id="pill-color-D">Yellow</span>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- Collapsible Virtual Notation Keypad -->
+        <div id="keypad-panel" class="keypad-panel hidden">
+          <div class="keypad-header">
+            <span>Virtual Notation Keypad (Click to append move)</span>
+          </div>
+
+          <div class="keypad-group-row">
+            <span class="keypad-group-label">Faces:</span>
+            <div class="key-buttons">
+              <button class="key-btn" data-move="U">U</button>
+              <button class="key-btn" data-move="U'">U'</button>
+              <button class="key-btn" data-move="U2">U2</button>
+              <button class="key-btn" data-move="D">D</button>
+              <button class="key-btn" data-move="D'">D'</button>
+              <button class="key-btn" data-move="D2">D2</button>
+              <button class="key-btn" data-move="L">L</button>
+              <button class="key-btn" data-move="L'">L'</button>
+              <button class="key-btn" data-move="L2">L2</button>
+              <button class="key-btn" data-move="R">R</button>
+              <button class="key-btn" data-move="R'">R'</button>
+              <button class="key-btn" data-move="R2">R2</button>
+              <button class="key-btn" data-move="F">F</button>
+              <button class="key-btn" data-move="F'">F'</button>
+              <button class="key-btn" data-move="F2">F2</button>
+              <button class="key-btn" data-move="B">B</button>
+              <button class="key-btn" data-move="B'">B'</button>
+              <button class="key-btn" data-move="B2">B2</button>
+            </div>
+          </div>
+
+          <div class="keypad-group-row">
+            <span class="keypad-group-label">Wide:</span>
+            <div class="key-buttons">
+              <button class="key-btn" data-wide="true" data-move="Uw">Uw</button>
+              <button class="key-btn" data-wide="true" data-move="Uw'">Uw'</button>
+              <button class="key-btn" data-wide="true" data-move="Dw">Dw</button>
+              <button class="key-btn" data-wide="true" data-move="Dw'">Dw'</button>
+              <button class="key-btn" data-wide="true" data-move="Rw">Rw</button>
+              <button class="key-btn" data-wide="true" data-move="Rw'">Rw'</button>
+              <button class="key-btn" data-wide="true" data-move="Lw">Lw</button>
+              <button class="key-btn" data-wide="true" data-move="Lw'">Lw'</button>
+              <button class="key-btn" data-wide="true" data-move="Fw">Fw</button>
+              <button class="key-btn" data-wide="true" data-move="Fw'">Fw'</button>
+              <button class="key-btn" data-wide="true" data-move="Bw">Bw</button>
+              <button class="key-btn" data-wide="true" data-move="Bw'">Bw'</button>
+            </div>
+          </div>
+
+          <div class="keypad-group-row">
+            <span class="keypad-group-label">Slices / Rot:</span>
+            <div class="key-buttons">
+              <button class="key-btn" data-slice="true" data-move="M">M</button>
+              <button class="key-btn" data-slice="true" data-move="M'">M'</button>
+              <button class="key-btn" data-slice="true" data-move="M2">M2</button>
+              <button class="key-btn" data-slice="true" data-move="E">E</button>
+              <button class="key-btn" data-slice="true" data-move="E'">E'</button>
+              <button class="key-btn" data-slice="true" data-move="S">S</button>
+              <button class="key-btn" data-slice="true" data-move="S'">S'</button>
+              <button class="key-btn" data-move="x">x</button>
+              <button class="key-btn" data-move="x'">x'</button>
+              <button class="key-btn" data-move="y">y</button>
+              <button class="key-btn" data-move="y'">y'</button>
+              <button class="key-btn" data-move="z">z</button>
+              <button class="key-btn" data-move="z'">z'</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Control Console Dock -->
+        <div class="control-dock">
+          <!-- Input Bar -->
+          <div class="input-row">
+            <div class="input-group">
+              <span class="input-prefix">MOVE &gt;</span>
+              <input 
+                type="text" 
+                id="notation-input" 
+                placeholder="Type standard notation (e.g. R U R' U' R' F R2 U' R' U' R U R' F')" 
+                autocomplete="off" 
+                spellcheck="false"
+                value="R U R' U'"
+              />
+              <div class="input-actions">
+                <button id="btn-run" class="btn-input run" title="Run sequence (Enter)">
+                  <span>▶</span> Run
+                </button>
+                <button id="btn-clear" class="btn-input clear" title="Clear input text">
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div class="input-status-line">
+              <div id="input-status">
+                <span class="status-hint">Enter moves separated by spaces</span>
+              </div>
+              <div id="progress-text" style="color: var(--text-dim); font-size: 11px;">
+                0 / 0 moves
+              </div>
+            </div>
+          </div>
+
+          <!-- Timeline & Progress -->
+          <div class="timeline-row">
+            <div class="progress-bar">
+              <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <div id="move-timeline" class="move-timeline">
+              <!-- Move chips rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Playback & Tooling Controls -->
+          <div class="controls-row">
+            <!-- Playback -->
+            <div class="playback-controls">
+              <button id="btn-step-prev" class="control-btn" title="Step Back (Undo last move)">
+                <span>⏮</span> Step Back
+              </button>
+              <button id="btn-play-pause" class="control-btn play" title="Play / Pause Sequence">
+                <span class="icon">▶</span> Play
+              </button>
+              <button id="btn-step-next" class="control-btn" title="Step Forward (Execute one move)">
+                <span>⏭</span> Step Next
+              </button>
+              <button id="btn-stop" class="control-btn" title="Stop and reset sequence index">
+                <span>⏹</span> Stop
+              </button>
+            </div>
+
+            <!-- Speed -->
+            <div class="speed-control-group">
+              <span class="speed-title">Speed:</span>
+              <input 
+                type="range" 
+                id="speed-slider" 
+                class="speed-slider" 
+                min="0" 
+                max="450" 
+                step="10" 
+                value="220" 
+                title="Adjust turn animation speed"
+              />
+              <span id="speed-label">Normal (220ms)</span>
+            </div>
+
+            <!-- Actions -->
+            <div class="utility-actions">
+              <button id="btn-scramble" class="control-btn" title="Generate and execute a random scramble">
+                <span>🔀</span> Scramble
+              </button>
+              <button id="btn-reset-cube" class="control-btn" title="Reset cube to solved state">
+                <span>🔄</span> Solved
+              </button>
+              <button id="btn-invert-seq" class="control-btn" title="Invert the current sequence">
+                <span>🔁</span> Invert
+              </button>
+              <select id="preset-select" class="custom-select" title="Load algorithm preset">
+                <option value="" disabled selected>— Select Algorithm —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Chess-Style Move History & Saved States Sidebar -->
+      <aside id="history-sidebar" class="history-sidebar">
+        <!-- Sidebar Header -->
+        <div class="sidebar-header">
+          <div class="sidebar-title-group">
+            <span class="sidebar-icon">♟️</span>
+            <span class="sidebar-title">Move History</span>
+            <span id="history-step-badge" class="history-step-badge">Move 0 / 0</span>
+          </div>
+          <button id="btn-close-history" class="btn-icon-subtle" title="Collapse Sidebar">&times;</button>
+        </div>
+
+        <!-- Sidebar Tabs -->
+        <div class="sidebar-tabs">
+          <button id="tab-btn-moves" class="sidebar-tab active">
+            <span>Moves</span>
+          </button>
+          <button id="tab-btn-states" class="sidebar-tab">
+            <span>Saved States</span>
+            <span id="saved-states-count" class="tab-badge">0</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: Moves History (Chess-style) -->
+        <div id="tab-content-moves" class="sidebar-tab-pane active">
+          <!-- Chess Navigation Bar -->
+          <div class="chess-nav-bar">
+            <button id="btn-nav-start" class="chess-nav-btn" title="Jump to Solved State (Start)">
+              <span>|◀</span>
+            </button>
+            <button id="btn-nav-prev" class="chess-nav-btn" title="Previous Move">
+              <span>◀</span>
+            </button>
+            <button id="btn-nav-next" class="chess-nav-btn" title="Next Move">
+              <span>▶</span>
+            </button>
+            <button id="btn-nav-end" class="chess-nav-btn" title="Latest Move (End)">
+              <span>▶|</span>
+            </button>
+            <button id="btn-quick-bookmark" class="chess-nav-btn bookmark" title="Save Current State as Bookmark">
+              <span>⭐ Save</span>
+            </button>
+          </div>
+
+          <!-- History Mode Selector -->
+          <div class="history-mode-box">
+            <span class="history-mode-title">On new moves:</span>
+            <div class="history-mode-options">
+              <label class="mode-radio-label" title="Replace moves following current step">
+                <input type="radio" name="historyMode" value="branch" checked> Branch
+              </label>
+              <label class="mode-radio-label" title="Insert new moves after current step and keep rest">
+                <input type="radio" name="historyMode" value="insert"> Insert
+              </label>
+            </div>
+          </div>
+
+          <!-- Paired Moves Table Container -->
+          <div class="chess-table-wrap">
+            <button class="chess-start-row active" id="chess-row-start" data-idx="0">
+              <span class="start-dot"></span>
+              <span class="start-title">0. Solved Cube (Initial State)</span>
+            </button>
+            <div id="chess-table-body" class="chess-table-body">
+              <!-- Dynamically populated paired moves -->
+            </div>
+          </div>
+
+          <!-- History Action Utilities -->
+          <div class="sidebar-bottom-bar">
+            <button id="btn-copy-history" class="sidebar-action-btn" title="Copy full sequence to clipboard">
+              <span>📋</span> Copy Moves
+            </button>
+            <button id="btn-clear-history" class="sidebar-action-btn danger" title="Clear move history">
+              <span>🗑️</span> Clear
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab 2: Saved States (Bookmarks) -->
+        <div id="tab-content-states" class="sidebar-tab-pane">
+          <!-- Quick Save State Card -->
+          <div class="save-state-card">
+            <div class="card-caption">Bookmark Current Position</div>
+            <div class="save-state-input-group">
+              <input 
+                type="text" 
+                id="save-state-name-input" 
+                placeholder="State name (e.g. Cross, F2L, Pattern)..." 
+                autocomplete="off" 
+              />
+              <button id="btn-save-state-confirm" class="btn-save-confirm">
+                Save
+              </button>
+            </div>
+          </div>
+
+          <!-- Saved States List Container -->
+          <div id="saved-states-list" class="saved-states-list">
+            <!-- Dynamically populated bookmarks -->
+          </div>
+
+          <!-- Import / Export Actions -->
+          <div class="sidebar-bottom-bar">
+            <button id="btn-export-states" class="sidebar-action-btn" title="Export saved states to JSON file">
+              <span>📤</span> Export JSON
+            </button>
+            <button id="btn-import-states" class="sidebar-action-btn" title="Import saved states from JSON file">
+              <span>📥</span> Import JSON
+            </button>
+            <input type="file" id="import-states-file" accept=".json" style="display:none;" />
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Notation Help Modal -->
+    <div id="help-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title">Standard Rubik's Cube Notation Guide</h3>
+          <button id="btn-close-help" class="btn-close-modal">&times;</button>
+        </div>
+
+        <div class="help-grid">
+          <div class="help-box">
+            <h4>Basic Face Turns (Clockwise 90°)</h4>
+            <ul>
+              <li><code>U</code> — Up (Top) face clockwise</li>
+              <li><code>D</code> — Down (Bottom) face clockwise</li>
+              <li><code>L</code> — Left face clockwise</li>
+              <li><code>R</code> — Right face clockwise</li>
+              <li><code>F</code> — Front face clockwise</li>
+              <li><code>B</code> — Back face clockwise</li>
+            </ul>
+          </div>
+
+          <div class="help-box">
+            <h4>Move Modifiers</h4>
+            <ul>
+              <li><code>'</code> (Prime) — Turn counter-clockwise (e.g. <code>R'</code>, <code>U'</code>)</li>
+              <li><code>2</code> — Double turn 180° (e.g. <code>R2</code>, <code>U2</code>)</li>
+              <li><code>2'</code> — Double turn in reverse direction</li>
+            </ul>
+          </div>
+
+          <div class="help-box">
+            <h4>Wide Moves (2 Layers)</h4>
+            <ul>
+              <li><code>Rw</code> or <code>r</code> — Turn Right face and adjacent inner layer</li>
+              <li><code>Lw</code> or <code>l</code> — Turn Left face and adjacent inner layer</li>
+              <li><code>Uw</code> or <code>u</code> — Turn Top 2 layers</li>
+              <li><code>Dw</code> or <code>d</code> — Turn Bottom 2 layers</li>
+              <li><code>Fw</code> or <code>f</code> — Turn Front 2 layers</li>
+              <li><code>Bw</code> or <code>b</code> — Turn Back 2 layers</li>
+            </ul>
+          </div>
+
+          <div class="help-box">
+            <h4>Slice Moves (3x3 & 4x4)</h4>
+            <ul>
+              <li><code>M</code> (Middle) — Slice between L and R, turns in direction of L</li>
+              <li><code>E</code> (Equator) — Slice between U and D, turns in direction of D</li>
+              <li><code>S</code> (Standing) — Slice between F and B, turns in direction of F</li>
+              <li><code>2R</code>, <code>2U</code> (4x4) — Turn single 2nd inner slice</li>
+            </ul>
+          </div>
+
+          <div class="help-box" style="grid-column: 1 / -1;">
+            <h4>Whole Cube Rotations</h4>
+            <ul>
+              <li><code>x</code> — Rotate entire cube in direction of <code>R</code> (tilt up)</li>
+              <li><code>y</code> — Rotate entire cube in direction of <code>U</code> (turn left)</li>
+              <li><code>z</code> — Rotate entire cube in direction of <code>F</code> (roll clockwise)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core Scripts -->
+  <script src="notation.js"></script>
+  <script src="cube.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

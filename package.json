@@ -1,0 +1,21 @@
+{
+  "name": "rubiks-simulator",
+  "version": "1.0.0",
+  "description": "3D Rubik's Cube Simulator (2x2, 3x3, 4x4) with View-Relative WCA notation and Chess-style move history",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node -c notation.js && node -c cube.js && node -c app.js && node -c server.js"
+  },
+  "keywords": [
+    "rubiks-cube",
+    "cube-simulator",
+    "threejs",
+    "webgl",
+    "wca-notation",
+    "speedcubing",
+    "chess-move-history"
+  ],
+  "author": "Jonas Kroedel",
+  "license": "MIT"
+}
