@@ -401,6 +401,8 @@ class RubiksCube3D {
 
   /**
    * Builds the Mirror / Bump Cube (Shape-mod with unequal layer thicknesses)
+   * The middle layer is centered at (0, 0, 0) so the core mechanism rotation axes
+   * pass cleanly through (0, 0, 0) without off-axis drift or piece collision.
    */
   buildMirrorCube() {
     this.size = 3;
@@ -408,10 +410,10 @@ class RubiksCube3D {
     const Ty = [0.75, 1.0, 1.25];
     const Tz = [0.85, 1.0, 1.15];
 
-    // Offsets to center the full 3.0 cube at (0, 0, 0)
-    const Cx = [-1.5 + 0.325, -1.5 + 0.65 + 0.5, -1.5 + 1.65 + 0.675];
-    const Cy = [-1.5 + 0.375, -1.5 + 0.75 + 0.5, -1.5 + 1.75 + 0.625];
-    const Cz = [-1.5 + 0.425, -1.5 + 0.85 + 0.5, -1.5 + 1.85 + 0.575];
+    // Offsets centered so the middle slice is centered at (0, 0, 0)
+    const Cx = [-0.5 - Tx[0] / 2, 0, 0.5 + Tx[2] / 2];
+    const Cy = [-0.5 - Ty[0] / 2, 0, 0.5 + Ty[2] / 2];
+    const Cz = [-0.5 - Tz[0] / 2, 0, 0.5 + Tz[2] / 2];
 
     const mirrorMat = this.materials.mirror;
 
@@ -512,18 +514,13 @@ class RubiksCube3D {
           const group = new THREE.Group();
           const pts = getFisherCellPolygon(x, z);
 
-          // 1. Black speedcube body
+          // 1. Black speedcube body (depth 0.93 so stickers are cleanly proud)
           const bodyShape = createPolygonShape(pts, 0);
-          const extrudeSettings = {
-            depth: 0.96,
-            bevelEnabled: true,
-            bevelSegments: 2,
-            steps: 1,
-            bevelSize: 0.02,
-            bevelThickness: 0.02
-          };
-          const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, extrudeSettings);
-          bodyGeo.translate(0, 0, -0.48);
+          const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, {
+            depth: 0.93,
+            bevelEnabled: false
+          });
+          bodyGeo.translate(0, 0, -0.465);
           bodyGeo.rotateX(-Math.PI / 2);
 
           const bodyMesh = new THREE.Mesh(bodyGeo, this.materials.inner);
@@ -536,7 +533,7 @@ class RubiksCube3D {
             const topShape = createPolygonShape(pts, 0.08);
             const topGeo = new THREE.ShapeGeometry(topShape);
             topGeo.rotateX(-Math.PI / 2);
-            topGeo.translate(0, 0.49, 0);
+            topGeo.translate(0, 0.485, 0);
             const topMesh = new THREE.Mesh(topGeo, this.solidMaterials.U);
             group.add(topMesh);
           }
@@ -545,8 +542,8 @@ class RubiksCube3D {
           if (y === -1) {
             const botShape = createPolygonShape(pts, 0.08);
             const botGeo = new THREE.ShapeGeometry(botShape);
-            botGeo.rotateX(Math.PI / 2);
-            botGeo.translate(0, -0.49, 0);
+            botGeo.rotateX(-Math.PI / 2);
+            botGeo.translate(0, -0.485, 0);
             const botMesh = new THREE.Mesh(botGeo, this.solidMaterials.D);
             group.add(botMesh);
           }
@@ -586,7 +583,7 @@ class RubiksCube3D {
                 const s2x = p2[0] - dx * insetFactor;
                 const s2z = p2[1] - dz * insetFactor;
 
-                const wallOff = 0.008;
+                const wallOff = 0.015;
                 const wallGeo = new THREE.BufferGeometry();
                 const v1 = [s1x + normal[0] * wallOff, -0.44, s1z + normal[1] * wallOff];
                 const v2 = [s2x + normal[0] * wallOff, -0.44, s2z + normal[1] * wallOff];
@@ -622,17 +619,20 @@ class RubiksCube3D {
   }
 
   /**
-   * Builds the WitEden & Oskar Mixup 3x3 (with solid mechanical core)
+   * Builds the WitEden & Oskar Mixup 3x3 (with authentic Oskar proportions)
+   * The middle layer width M is equal to the diagonal of the edge stones (S * sqrt(2)),
+   * ensuring that the square centers are as big as the diagonal of the edge pieces.
    */
   buildMixupCube() {
     this.size = 3;
-    const cubieSize = 0.96;
-    const spacing = 1.0;
-    const offset = 1;
-    const cubieGeo = new THREE.BoxGeometry(cubieSize, cubieSize, cubieSize);
+    const S = 3.0 / (2 + Math.SQRT2); // ~0.8787 outer layer thickness
+    const M = S * Math.SQRT2;         // ~1.2426 middle layer thickness (diagonal of S x S edge)
+    const T = [S, M, S];
+    const C = [-M / 2 - S / 2, 0, M / 2 + S / 2]; // [-1.0607, 0, 1.0607]
+    const gap = 0.035;
 
     // Internal speedcube spherical core visible when 45° slices turn
-    const coreGeo = new THREE.SphereGeometry(0.88, 32, 32);
+    const coreGeo = new THREE.SphereGeometry(M * 0.72, 32, 32);
     const coreMesh = new THREE.Mesh(coreGeo, this.materials.inner);
     this.cubeGroup.add(coreMesh);
 
@@ -641,6 +641,11 @@ class RubiksCube3D {
         for (let z = 0; z < 3; z++) {
           const isExterior = (x === 0 || x === 2 || y === 0 || y === 2 || z === 0 || z === 2);
           if (!isExterior) continue;
+
+          const w = T[x] - gap;
+          const h = T[y] - gap;
+          const d = T[z] - gap;
+          const cubieGeo = new THREE.BoxGeometry(w, h, d);
 
           const mats = [
             x === 2 ? this.materials.R : this.materials.inner,
@@ -655,13 +660,9 @@ class RubiksCube3D {
           cubie.castShadow = true;
           cubie.receiveShadow = true;
 
-          cubie.position.set(
-            (x - offset) * spacing,
-            (y - offset) * spacing,
-            (z - offset) * spacing
-          );
-
+          cubie.position.set(C[x], C[y], C[z]);
           cubie.userData = { initialX: x, initialY: y, initialZ: z, isMixup: true };
+
           this.cubeGroup.add(cubie);
           this.cubies.push(cubie);
         }
@@ -807,12 +808,29 @@ class RubiksCube3D {
     const { axis, layers, angle } = resolved;
     const N = this.size;
     const offset = (N - 1) / 2;
-    const threshold = (this.puzzleType === 'mirror' || this.puzzleType === 'fisher') ? 0.35 : 0.25;
 
     const selectedCubies = this.cubies.filter(cubie => {
       const coord = cubie.position[axis];
-      const layerIdx = Math.round(coord + offset);
-      return layers.includes(layerIdx) && Math.abs((layerIdx - offset) - coord) < threshold;
+      let layerIdx = -1;
+
+      if (this.puzzleType === 'mirror') {
+        if (coord < -0.45) layerIdx = 0;
+        else if (coord > 0.45) layerIdx = 2;
+        else layerIdx = 1;
+      } else if (this.puzzleType === 'mixup') {
+        const cut = 0.55;
+        if (coord < -cut) layerIdx = 0;
+        else if (coord > cut) layerIdx = 2;
+        else if (Math.abs(coord) < 0.25) layerIdx = 1;
+        else layerIdx = -1; // tilted across cut
+      } else {
+        const idx = Math.round(coord + offset);
+        if (Math.abs((idx - offset) - coord) < 0.35) {
+          layerIdx = idx;
+        }
+      }
+
+      return layers.includes(layerIdx);
     });
 
     // On Mixup 3x3, if a slice is at 45°, perpendicular face turns are mechanically bandaged
@@ -881,7 +899,21 @@ class RubiksCube3D {
 
       if (this.puzzleType === 'mixup') {
         this.snapMixupPosition(cubie, axis);
-      } else if (!cubie.userData.isMirror) {
+      } else if (this.puzzleType === 'mirror') {
+        // Snap mirror coordinates to exact layer centers to eliminate numerical drift
+        const snapMirrorCoord = (val) => {
+          const valid = [-1.175, -0.925, -0.875, -0.825, 0, 0.825, 0.875, 0.925, 1.175];
+          let best = val, minDiff = Infinity;
+          for (const v of valid) {
+            const diff = Math.abs(val - v);
+            if (diff < minDiff) { minDiff = diff; best = v; }
+          }
+          return minDiff < 0.15 ? best : val;
+        };
+        cubie.position.x = snapMirrorCoord(cubie.position.x);
+        cubie.position.y = snapMirrorCoord(cubie.position.y);
+        cubie.position.z = snapMirrorCoord(cubie.position.z);
+      } else {
         cubie.position.x = Math.round(cubie.position.x + offset) - offset;
         cubie.position.y = Math.round(cubie.position.y + offset) - offset;
         cubie.position.z = Math.round(cubie.position.z + offset) - offset;
@@ -904,8 +936,13 @@ class RubiksCube3D {
     const r = Math.sqrt(u * u + v * v);
     if (r < 0.1) return;
 
-    // Radius is either ~1.0 (centers) or ~sqrt(2) (edges/corners in plane)
-    const targetR = Math.abs(r - 1.0) < 0.25 ? 1.0 : (Math.abs(r - Math.SQRT2) < 0.25 ? Math.SQRT2 : r);
+    const S = 3.0 / (2 + Math.SQRT2);
+    const M = S * Math.SQRT2;
+    const Rc = M / 2 + S / 2;   // ~1.06066
+    const Re = Rc * Math.SQRT2; // ~1.50
+
+    // Target radius is either Rc (centers) or Re (edges)
+    const targetR = Math.abs(r - Rc) < 0.22 ? Rc : (Math.abs(r - Re) < 0.22 ? Re : r);
     const theta = Math.atan2(v, u);
     const step = Math.PI / 4;
     const snappedTheta = Math.round(theta / step) * step;
@@ -913,12 +950,20 @@ class RubiksCube3D {
     let su = targetR * Math.cos(snappedTheta);
     let sv = targetR * Math.sin(snappedTheta);
 
-    if (Math.abs(su - Math.round(su)) < 0.02) su = Math.round(su);
-    if (Math.abs(sv - Math.round(sv)) < 0.02) sv = Math.round(sv);
+    if (Math.abs(su) < 0.04) su = 0;
+    if (Math.abs(sv) < 0.04) sv = 0;
+    if (Math.abs(su - Rc) < 0.04) su = Rc;
+    if (Math.abs(su + Rc) < 0.04) su = -Rc;
+    if (Math.abs(sv - Rc) < 0.04) sv = Rc;
+    if (Math.abs(sv + Rc) < 0.04) sv = -Rc;
 
     cubie.position[uKey] = su;
     cubie.position[vKey] = sv;
-    cubie.position[axis] = Math.round(cubie.position[axis]);
+
+    const axVal = cubie.position[axis];
+    if (Math.abs(axVal) < 0.04) cubie.position[axis] = 0;
+    else if (Math.abs(axVal - Rc) < 0.04) cubie.position[axis] = Rc;
+    else if (Math.abs(axVal + Rc) < 0.04) cubie.position[axis] = -Rc;
   }
 
   snapOrientation(cubie) {
