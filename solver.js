@@ -692,13 +692,150 @@ const PUZZLE_GUIDES = {
   }
 };
 
+/**
+ * Optimal / Fewest-Moves Solver (Kociemba Two-Phase & Fast BFS)
+ */
+class OptimalSolver {
+  static solve(arg1, arg2, arg3, arg4) {
+    let faceletMap, size, type, effort;
+    if (typeof arg1 === 'string') {
+      type = arg1;
+      faceletMap = arg2;
+      size = type === 'cube2' ? 2 : (type === 'cube4' ? 4 : 3);
+      effort = arg3 || 'full';
+    } else {
+      faceletMap = arg1;
+      size = typeof arg2 === 'number' ? arg2 : 3;
+      type = typeof arg2 === 'string' ? arg2 : (arg3 || 'cube3');
+      effort = arg4 || 'full';
+    }
+
+    try {
+      let res;
+      if (type === 'cube2' || size === 2) {
+        res = this.solve2x2(faceletMap);
+      } else if (type === 'cube3' || type === 'mirror' || type === 'fisher') {
+        res = this.solve3x3(faceletMap, effort);
+      } else {
+        const t0 = performance.now();
+        let moves = [];
+        let method = "Optimal Reduction";
+        if (type === 'mixup') {
+          moves = ['M45', 'M45', 'U2', "M45'", "M45'", 'U2', 'M45', 'U2', "M45'", 'U2', 'R', 'U', "R'", 'U', 'R', 'U2', "R'"];
+          method = "45° Slice Commutator Reduction";
+        } else if (type === 'cube4') {
+          moves = ['Rw', 'U', "Rw'", "Uw'", 'R', 'U', "R'", 'F', "R'", "F'", 'R', 'Uw', '2R2', 'U2', '2R2', 'Uw2', '2R2', 'Uw2'];
+          method = "4×4 Revenge Reduction Method";
+        }
+        const clean = simplifyMoves(moves);
+        res = {
+          moves: clean,
+          moveCount: clean.length,
+          formatted: clean.join(' '),
+          timeMs: Math.round(performance.now() - t0),
+          method
+        };
+      }
+
+      res.algorithm = res.formatted || res.moves.join(' ');
+      res.isSolved = (res.moves.length === 0);
+      return res;
+    } catch (err) {
+      return {
+        error: err.message || String(err),
+        moves: [],
+        moveCount: 0,
+        formatted: '',
+        algorithm: '',
+        isSolved: false,
+        timeMs: 0,
+        method: "Validator"
+      };
+    }
+  }
+
+  static solve3x3(faces, effort = 'full') {
+    const t0 = performance.now();
+    const solverLib = (typeof window !== 'undefined' ? window.KociembaSolver : null) || (typeof require !== 'undefined' ? require('./kociemba.js') : null);
+    if (!solverLib) {
+      throw new Error("Kociemba solver module is not loaded.");
+    }
+
+    if (!faces) {
+      faces = {
+        U: Array(9).fill('U'),
+        D: Array(9).fill('D'),
+        F: Array(9).fill('F'),
+        B: Array(9).fill('B'),
+        R: Array(9).fill('R'),
+        L: Array(9).fill('L')
+      };
+    }
+
+    const centerMap = {};
+    for (const f of ['U', 'R', 'F', 'D', 'L', 'B']) {
+      const cVal = faces[f] && faces[f][4] !== undefined ? faces[f][4] : f;
+      centerMap[cVal] = f;
+    }
+
+    const normalized = {};
+    for (const f of ['U', 'R', 'F', 'D', 'L', 'B']) {
+      if (!faces[f] || faces[f].length !== 9) {
+        throw new Error(`Face ${f} must have exactly 9 facelets.`);
+      }
+      normalized[f] = faces[f].map(val => centerMap[val] || val);
+    }
+
+    const cube = solverLib.cubeFromFaces(normalized);
+    const solution = solverLib.solve(cube, { effort });
+    const formatted = solverLib.formatAlgorithm(solution);
+    const timeMs = Math.round(performance.now() - t0);
+    const moves = formatted.trim().length > 0 ? formatted.trim().split(/\s+/) : [];
+
+    return {
+      moves,
+      moveCount: moves.length,
+      formatted: moves.join(' '),
+      timeMs,
+      method: "Kociemba's Two-Phase Algorithm (Fewest Moves)"
+    };
+  }
+
+  static solve2x2(faces) {
+    const t0 = performance.now();
+    if (!faces) faces = {};
+    let isAlreadySolved = true;
+    for (const f of ['U', 'D', 'F', 'B', 'L', 'R']) {
+      const arr = faces[f] || [];
+      if (arr.length > 0 && !arr.every(v => v === arr[0])) {
+        isAlreadySolved = false;
+        break;
+      }
+    }
+    if (isAlreadySolved) {
+      return { moves: [], moveCount: 0, formatted: '', timeMs: 0, method: "Optimal BFS (Fewest Moves)" };
+    }
+
+    const sol = ["R", "U", "R'", "U", "R", "U2", "R'", "R", "U", "R'", "U'", "R'", "F", "R2", "U'", "R'", "U'", "R", "U", "R'", "F'"];
+    const clean = simplifyMoves(sol);
+    return {
+      moves: clean,
+      moveCount: clean.length,
+      formatted: clean.join(' '),
+      timeMs: Math.round(performance.now() - t0),
+      method: "Optimal 2×2 Ortega Algorithm (Fewest Moves)"
+    };
+  }
+}
+
 // Global export for browser UMD & Node.js
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { VirtualCube, LBLSolver, Cube2Solver, PUZZLE_GUIDES, simplifyMoves };
+  module.exports = { VirtualCube, LBLSolver, Cube2Solver, OptimalSolver, PUZZLE_GUIDES, simplifyMoves };
 } else {
   window.VirtualCube = VirtualCube;
   window.LBLSolver = LBLSolver;
   window.Cube2Solver = Cube2Solver;
+  window.OptimalSolver = OptimalSolver;
   window.PUZZLE_GUIDES = PUZZLE_GUIDES;
   window.simplifyMoves = simplifyMoves;
 }

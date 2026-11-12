@@ -1,8 +1,390 @@
 /**
  * Main Application Logic for Rubik's Cube Simulator
  * Coordinates UI, 3D Engine, Notation Parser, Playback Queue,
- * Chess-Style Move History, Saved States, and Cube Designer Studio.
+ * Chess-Style Move History, Saved States, Cube Designer Studio,
+ * 3D Physical Cube Rebuilder, and Kociemba Optimal Instant Solver.
  */
+
+/**
+ * Interactive 3D Cube Painter for Physical Cube Rebuilder
+ * Allows full orbit rotation, hover highlighting, and click-to-paint directly on cubie faces.
+ */
+class Rebuilder3DPainter {
+  constructor(containerElement, onFaceletPainted) {
+    this.container = containerElement;
+    this.onFaceletPainted = onFaceletPainted;
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.controls = null;
+    this.cubeGroup = null;
+    this.hoverReticle = null;
+    this.cubies = [];
+    this.faceletCubieMap = { U: [], D: [], F: [], B: [], R: [], L: [] };
+    this.size = 3;
+    this.theme = null;
+    this.materialsCache = {};
+    this.bodyMaterial = null;
+    this.pointerDownPos = { x: 0, y: 0 };
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this.isInitialized = false;
+  }
+
+  initThree() {
+    if (this.isInitialized) return;
+    const w = this.container.clientWidth || 480;
+    const h = this.container.clientHeight || 420;
+
+    this.scene = new THREE.Scene();
+
+    this.camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setSize(w, h);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.container.appendChild(this.renderer.domElement);
+
+    if (window.THREE && window.THREE.OrbitControls) {
+      this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+      this.controls.enableDamping = true;
+      this.controls.dampingFactor = 0.08;
+      this.controls.enablePan = false;
+      this.controls.minDistance = 3.5;
+      this.controls.maxDistance = 22;
+    }
+
+    const ambLight = new THREE.AmbientLight(0xffffff, 0.8);
+    this.scene.add(ambLight);
+
+    const dir1 = new THREE.DirectionalLight(0xffffff, 0.85);
+    dir1.position.set(10, 15, 12);
+    this.scene.add(dir1);
+
+    const dir2 = new THREE.DirectionalLight(0xb0c4de, 0.45);
+    dir2.position.set(-10, -12, -10);
+    this.scene.add(dir2);
+
+    this.cubeGroup = new THREE.Group();
+    this.scene.add(this.cubeGroup);
+
+    // Hover wireframe reticle
+    const reticleGeo = new THREE.PlaneGeometry(0.92, 0.92);
+    const edgesGeo = new THREE.EdgesGeometry(reticleGeo);
+    this.hoverReticle = new THREE.LineSegments(
+      edgesGeo,
+      new THREE.LineBasicMaterial({ color: 0x00f0ff, linewidth: 3, depthTest: false })
+    );
+    this.hoverReticle.visible = false;
+    this.hoverReticle.renderOrder = 999;
+    this.scene.add(this.hoverReticle);
+
+    this.bindPointerEvents();
+    this.isInitialized = true;
+
+    const renderLoop = () => {
+      requestAnimationFrame(renderLoop);
+      if (this.controls) this.controls.update();
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    };
+    renderLoop();
+  }
+
+  bindPointerEvents() {
+    const dom = this.renderer.domElement;
+    dom.addEventListener('pointerdown', (e) => {
+      this.pointerDownPos = { x: e.clientX, y: e.clientY };
+    });
+
+    dom.addEventListener('pointermove', (e) => {
+      this.handlePointerMove(e);
+    });
+
+    dom.addEventListener('pointerup', (e) => {
+      const dx = Math.abs(e.clientX - this.pointerDownPos.x);
+      const dy = Math.abs(e.clientY - this.pointerDownPos.y);
+      if (dx < 6 && dy < 6) {
+        this.handlePointerClick(e);
+      }
+    });
+
+    dom.addEventListener('pointerleave', () => {
+      if (this.hoverReticle) this.hoverReticle.visible = false;
+      dom.style.cursor = 'default';
+    });
+  }
+
+  intersectFacelet(e) {
+    if (!this.renderer || !this.camera) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    const intersects = this.raycaster.intersectObjects(this.cubies, false);
+    if (intersects.length === 0) return null;
+
+    const hit = intersects[0];
+    const cubie = hit.object;
+    if (!cubie.userData) return null;
+
+    const normal = hit.face.normal.clone().applyQuaternion(cubie.quaternion).normalize();
+
+    let face = null;
+    let localMatIdx = 0;
+    if (normal.x > 0.6) { face = 'R'; localMatIdx = 0; }
+    else if (normal.x < -0.6) { face = 'L'; localMatIdx = 1; }
+    else if (normal.y > 0.6) { face = 'U'; localMatIdx = 2; }
+    else if (normal.y < -0.6) { face = 'D'; localMatIdx = 3; }
+    else if (normal.z > 0.6) { face = 'F'; localMatIdx = 4; }
+    else if (normal.z < -0.6) { face = 'B'; localMatIdx = 5; }
+
+    if (!face) return null;
+
+    const N = this.size;
+    const gx = cubie.userData.gx;
+    const gy = cubie.userData.gy;
+    const gz = cubie.userData.gz;
+
+    let idx = 0;
+    if (face === 'U') idx = gz * N + gx;
+    else if (face === 'D') idx = (N - 1 - gz) * N + gx;
+    else if (face === 'F') idx = (N - 1 - gy) * N + gx;
+    else if (face === 'B') idx = (N - 1 - gy) * N + (N - 1 - gx);
+    else if (face === 'R') idx = (N - 1 - gy) * N + (N - 1 - gz);
+    else if (face === 'L') idx = (N - 1 - gy) * N + gz;
+
+    return { face, idx, cubie, localMatIdx, normal };
+  }
+
+  handlePointerMove(e) {
+    const hit = this.intersectFacelet(e);
+    if (hit && this.hoverReticle) {
+      this.hoverReticle.visible = true;
+      const pos = hit.cubie.position.clone().add(hit.normal.clone().multiplyScalar(0.485));
+      this.hoverReticle.position.copy(pos);
+      this.hoverReticle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
+      this.renderer.domElement.style.cursor = 'pointer';
+    } else if (this.hoverReticle) {
+      this.hoverReticle.visible = false;
+      this.renderer.domElement.style.cursor = 'grab';
+    }
+  }
+
+  handlePointerClick(e) {
+    const hit = this.intersectFacelet(e);
+    if (hit && this.onFaceletPainted) {
+      this.onFaceletPainted(hit.face, hit.idx);
+    }
+  }
+
+  getStickerMaterial(colorCode) {
+    if (this.materialsCache[colorCode]) {
+      return this.materialsCache[colorCode];
+    }
+
+    const th = this.theme || {
+      U: '#F7F8FA', D: '#FFD500', F: '#009E48', B: '#0046AD', R: '#C41230', L: '#FF5500', body: '#121316'
+    };
+    const fillHex = th[colorCode] || '#999999';
+    const bodyHex = th.body || '#121316';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    // Body border
+    ctx.fillStyle = bodyHex;
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Rounded sticker
+    const pad = 16;
+    const rad = 24;
+    const size = 256 - pad * 2;
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(pad, pad, size, size, rad);
+    } else {
+      ctx.rect(pad, pad, size, size);
+    }
+    ctx.fillStyle = fillHex;
+    ctx.fill();
+
+    // Subtle highlight sheen
+    const grad = ctx.createLinearGradient(pad, pad, pad, pad + size * 0.45);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.MeshStandardMaterial({
+      map: texture,
+      roughness: 0.28,
+      metalness: 0.04
+    });
+
+    this.materialsCache[colorCode] = mat;
+    return mat;
+  }
+
+  build(size = 3, theme = null, netFaces = null) {
+    this.initThree();
+    this.size = size;
+    if (theme) {
+      this.theme = theme;
+      this.materialsCache = {};
+    }
+
+    const N = this.size;
+    const net = netFaces || {
+      U: Array(N * N).fill('U'),
+      D: Array(N * N).fill('D'),
+      F: Array(N * N).fill('F'),
+      B: Array(N * N).fill('B'),
+      R: Array(N * N).fill('R'),
+      L: Array(N * N).fill('L')
+    };
+
+    while (this.cubeGroup.children.length > 0) {
+      this.cubeGroup.remove(this.cubeGroup.children[0]);
+    }
+
+    this.cubies = [];
+    this.faceletCubieMap = { U: [], D: [], F: [], B: [], R: [], L: [] };
+
+    this.bodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x121316,
+      roughness: 0.6,
+      metalness: 0.1
+    });
+
+    const offset = (N - 1) / 2;
+    const geom = new THREE.BoxGeometry(0.96, 0.96, 0.96);
+
+    for (let x = 0; x < N; x++) {
+      for (let y = 0; y < N; y++) {
+        for (let z = 0; z < N; z++) {
+          const isExt = (x === 0 || x === N - 1 || y === 0 || y === N - 1 || z === 0 || z === N - 1);
+          if (!isExt) continue;
+
+          // Material slots: 0:R, 1:L, 2:U, 3:D, 4:F, 5:B
+          const mats = [
+            this.bodyMaterial,
+            this.bodyMaterial,
+            this.bodyMaterial,
+            this.bodyMaterial,
+            this.bodyMaterial,
+            this.bodyMaterial
+          ];
+
+          const idxU = z * N + x;
+          const idxD = (N - 1 - z) * N + x;
+          const idxF = (N - 1 - y) * N + x;
+          const idxB = (N - 1 - y) * N + (N - 1 - x);
+          const idxR = (N - 1 - y) * N + (N - 1 - z);
+          const idxL = (N - 1 - y) * N + z;
+
+          if (x === N - 1) mats[0] = this.getStickerMaterial(net.R ? net.R[idxR] : 'R');
+          if (x === 0)     mats[1] = this.getStickerMaterial(net.L ? net.L[idxL] : 'L');
+          if (y === N - 1) mats[2] = this.getStickerMaterial(net.U ? net.U[idxU] : 'U');
+          if (y === 0)     mats[3] = this.getStickerMaterial(net.D ? net.D[idxD] : 'D');
+          if (z === N - 1) mats[4] = this.getStickerMaterial(net.F ? net.F[idxF] : 'F');
+          if (z === 0)     mats[5] = this.getStickerMaterial(net.B ? net.B[idxB] : 'B');
+
+          const cubie = new THREE.Mesh(geom, mats);
+          cubie.position.set(x - offset, y - offset, z - offset);
+          cubie.userData = { gx: x, gy: y, gz: z };
+
+          if (x === N - 1) this.faceletCubieMap.R[idxR] = { cubie, matIdx: 0 };
+          if (x === 0)     this.faceletCubieMap.L[idxL] = { cubie, matIdx: 1 };
+          if (y === N - 1) this.faceletCubieMap.U[idxU] = { cubie, matIdx: 2 };
+          if (y === 0)     this.faceletCubieMap.D[idxD] = { cubie, matIdx: 3 };
+          if (z === N - 1) this.faceletCubieMap.F[idxF] = { cubie, matIdx: 4 };
+          if (z === 0)     this.faceletCubieMap.B[idxB] = { cubie, matIdx: 5 };
+
+          this.cubies.push(cubie);
+          this.cubeGroup.add(cubie);
+        }
+      }
+    }
+
+    const distMap = { 2: 5.6, 3: 7.2, 4: 9.0 };
+    const dist = distMap[N] || 7.2;
+    this.camera.position.set(dist * 0.75, dist * 0.65, dist * 0.95);
+    this.camera.lookAt(0, 0, 0);
+    if (this.controls) {
+      this.controls.target.set(0, 0, 0);
+      this.controls.update();
+    }
+  }
+
+  updateFacelet(face, idx, colorCode) {
+    const item = (this.faceletCubieMap && this.faceletCubieMap[face]) ? this.faceletCubieMap[face][idx] : null;
+    if (!item || !item.cubie) return;
+    const mat = this.getStickerMaterial(colorCode);
+    const mats = [...item.cubie.material];
+    mats[item.matIdx] = mat;
+    item.cubie.material = mats;
+  }
+
+  snapCamera(preset) {
+    const distMap = { 2: 5.6, 3: 7.2, 4: 9.0 };
+    const dist = distMap[this.size] || 7.2;
+    const targets = {
+      iso:    { x: dist * 0.75, y: dist * 0.65, z: dist * 0.95 },
+      front:  { x: 0,           y: 0,           z: dist },
+      back:   { x: 0,           y: 0,           z: -dist },
+      top:    { x: 0,           y: dist,        z: 0.001 },
+      bottom: { x: 0,           y: -dist,       z: 0.001 },
+      right:  { x: dist,        y: 0,           z: 0 },
+      left:   { x: -dist,       y: 0,           z: 0 }
+    };
+    const targetPos = targets[preset] || targets.iso;
+    this.animateCameraTo(targetPos);
+  }
+
+  animateCameraTo(targetPos) {
+    if (!this.camera) return;
+    const startPos = this.camera.position.clone();
+    const dest = new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z);
+    const startTime = performance.now();
+    const duration = 280;
+
+    const step = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1.0);
+      const ease = progress < 0.5
+        ? 2 * progress * progress
+        : -1 + (4 - 2 * progress) * progress;
+
+      this.camera.position.lerpVectors(startPos, dest, ease);
+      this.camera.lookAt(0, 0, 0);
+      if (this.controls) {
+        this.controls.target.set(0, 0, 0);
+      }
+
+      if (progress < 1.0) {
+        requestAnimationFrame(step);
+      } else {
+        this.camera.position.copy(dest);
+        if (this.controls) this.controls.update();
+      }
+    };
+    requestAnimationFrame(step);
+  }
+
+  resize() {
+    if (!this.renderer || !this.container) return;
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+  }
+}
 
 class CubeApp {
   constructor() {
@@ -31,6 +413,12 @@ class CubeApp {
     // Physical Cube Rebuilder State
     this.rebuilderActiveBrush = 'U';
     this.rebuilderNet = null;
+    this.rebuilder3DPainter = null;
+
+    // Instant Solve State
+    this.instantSolveResult = null;
+    this.instantMoveIdx = 0;
+    this.instantIsPlaying = false;
 
     // Step-by-Step Solver Guide State
     this.solverStages = [];
@@ -129,6 +517,8 @@ class CubeApp {
     this.btnToggleDesigner = document.getElementById('btn-toggle-designer');
     this.btnToggleRebuilder = document.getElementById('btn-toggle-rebuilder');
     this.btnToggleSolver = document.getElementById('btn-toggle-solver');
+    this.btnInstantSolve = document.getElementById('btn-instant-solve');
+    this.btnDockInstantSolve = document.getElementById('btn-dock-instant-solve');
 
     // Physical Cube Rebuilder Elements
     this.rebuilderModal = document.getElementById('modal-rebuilder');
@@ -138,12 +528,40 @@ class CubeApp {
     this.btnRebuilderClear = document.getElementById('btn-rebuilder-clear');
     this.btnRebuilderApply = document.getElementById('btn-rebuilder-apply');
     this.btnRebuilderApplySolve = document.getElementById('btn-rebuilder-apply-solve');
+    this.btnRebuilderInstantSolve = document.getElementById('btn-rebuilder-instant-solve');
     this.rebuilderStatusBanner = document.getElementById('rebuilder-status-banner');
     this.rebuilderStatusText = document.getElementById('rebuilder-status-text');
     this.rebuilderStatusDetails = document.getElementById('rebuilder-status-details');
     this.cubeUnfoldedNet = document.getElementById('cube-unfolded-net');
     this.rebuilderPalettePills = document.getElementById('rebuilder-palette-pills');
     this.rebuilderPuzzleTypePill = document.getElementById('rebuilder-puzzle-type-pill');
+    this.rebuilderWorkspace = document.getElementById('rebuilder-workspace');
+    this.rebuilderTab3D = document.getElementById('btn-rebuilder-tab-3d');
+    this.rebuilderTabSplit = document.getElementById('btn-rebuilder-tab-split');
+    this.rebuilderTabNet = document.getElementById('btn-rebuilder-tab-net');
+    this.rebuilder3DCanvasWrap = document.getElementById('rebuilder-3d-canvas-wrap');
+    this.camSnapButtons = document.querySelectorAll('.cam-snap-btn');
+
+    // Instant Solve (Least Moves) Modal Elements
+    this.instantSolveModal = document.getElementById('modal-instant-solve');
+    this.btnCloseInstant = document.getElementById('btn-close-instant');
+    this.instantMoveCount = document.getElementById('instant-move-count');
+    this.instantSolveTime = document.getElementById('instant-solve-time');
+    this.instantSolveMethod = document.getElementById('instant-solve-method');
+    this.instantAlgorithmText = document.getElementById('instant-algorithm-text');
+    this.btnCopyInstantAlg = document.getElementById('btn-copy-instant-alg');
+    this.instantTotalChips = document.getElementById('instant-total-chips');
+    this.instantCurrentIdx = document.getElementById('instant-current-idx');
+    this.instantMoveChips = document.getElementById('instant-move-chips');
+    this.btnInstantPrev = document.getElementById('btn-instant-prev');
+    this.btnInstantPlay = document.getElementById('btn-instant-play');
+    this.instantPlayIcon = document.getElementById('instant-play-icon');
+    this.instantPlayLabel = document.getElementById('instant-play-label');
+    this.btnInstantNext = document.getElementById('btn-instant-next');
+    this.btnInstantReset = document.getElementById('btn-instant-reset');
+    this.instantSpeedSelect = document.getElementById('instant-speed-select');
+    this.btnInstantJumpSolved = document.getElementById('btn-instant-jump-solved');
+    this.instantEfficiencyText = document.getElementById('instant-efficiency-text');
 
     // Step-by-Step Solver Guide Elements
     this.solverModal = document.getElementById('modal-solver-guide');
@@ -443,6 +861,99 @@ class CubeApp {
     if (this.btnRebuilderApplySolve) {
       this.btnRebuilderApplySolve.addEventListener('click', () => {
         this.rebuilderApplyTo3D(true);
+      });
+    }
+
+    if (this.btnRebuilderInstantSolve) {
+      this.btnRebuilderInstantSolve.addEventListener('click', () => {
+        if (this.rebuilderNet) {
+          this.rebuilderApplyTo3D(false);
+        }
+        this.openInstantSolve();
+      });
+    }
+
+    // 3D Rebuilder View Tabs
+    const setRebuilderView = (mode) => {
+      if (!this.rebuilderWorkspace) return;
+      this.rebuilderWorkspace.className = `rebuilder-workspace mode-${mode}`;
+      if (this.rebuilderTab3D) this.rebuilderTab3D.classList.toggle('active', mode === '3d');
+      if (this.rebuilderTabSplit) this.rebuilderTabSplit.classList.toggle('active', mode === 'split');
+      if (this.rebuilderTabNet) this.rebuilderTabNet.classList.toggle('active', mode === 'net');
+      setTimeout(() => {
+        if (this.rebuilder3DPainter) this.rebuilder3DPainter.resize();
+      }, 50);
+    };
+
+    if (this.rebuilderTab3D) this.rebuilderTab3D.addEventListener('click', () => setRebuilderView('3d'));
+    if (this.rebuilderTabSplit) this.rebuilderTabSplit.addEventListener('click', () => setRebuilderView('split'));
+    if (this.rebuilderTabNet) this.rebuilderTabNet.addEventListener('click', () => setRebuilderView('net'));
+
+    // 3D Rebuilder Camera Snap Bar
+    if (this.camSnapButtons) {
+      this.camSnapButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const snap = btn.dataset.snap;
+          if (this.rebuilder3DPainter) {
+            this.rebuilder3DPainter.snapCamera(snap);
+          }
+        });
+      });
+    }
+
+    // Instant Solve Events (Header, Dock, Modal Controls)
+    if (this.btnInstantSolve) {
+      this.btnInstantSolve.addEventListener('click', () => {
+        this.openInstantSolve();
+      });
+    }
+
+    if (this.btnDockInstantSolve) {
+      this.btnDockInstantSolve.addEventListener('click', () => {
+        this.openInstantSolve();
+      });
+    }
+
+    if (this.btnCloseInstant && this.instantSolveModal) {
+      this.btnCloseInstant.addEventListener('click', () => {
+        this.instantIsPlaying = false;
+        this.instantSolveModal.classList.add('hidden');
+      });
+    }
+
+    if (this.btnCopyInstantAlg) {
+      this.btnCopyInstantAlg.addEventListener('click', () => {
+        this.copyInstantAlgorithm();
+      });
+    }
+
+    if (this.btnInstantNext) {
+      this.btnInstantNext.addEventListener('click', () => {
+        this.instantStepNext();
+      });
+    }
+
+    if (this.btnInstantPrev) {
+      this.btnInstantPrev.addEventListener('click', () => {
+        this.instantStepPrev();
+      });
+    }
+
+    if (this.btnInstantPlay) {
+      this.btnInstantPlay.addEventListener('click', () => {
+        this.instantTogglePlay();
+      });
+    }
+
+    if (this.btnInstantReset) {
+      this.btnInstantReset.addEventListener('click', () => {
+        this.instantReset();
+      });
+    }
+
+    if (this.btnInstantJumpSolved) {
+      this.btnInstantJumpSolved.addEventListener('click', () => {
+        this.instantJumpToSolved();
       });
     }
 
@@ -1558,7 +2069,7 @@ class CubeApp {
   }
 
   // =========================================================================
-  // Physical Cube Rebuilder (2D Net Facelet Painter) Logic
+  // Physical Cube Rebuilder (3D Painter & 2D Net) Logic
   // =========================================================================
   openRebuilder() {
     if (!this.rebuilderModal) return;
@@ -1582,7 +2093,37 @@ class CubeApp {
     this.renderRebuilderPalette();
     this.renderRebuilderNet();
     this.validateRebuilderNet();
+
+    // Initialize 3D Painter if not created yet
+    if (!this.rebuilder3DPainter && this.rebuilder3DCanvasWrap) {
+      this.rebuilder3DPainter = new Rebuilder3DPainter(
+        this.rebuilder3DCanvasWrap,
+        (face, idx) => {
+          if (!this.rebuilderNet) return;
+          this.rebuilderNet[face][idx] = this.rebuilderActiveBrush;
+          if (this.rebuilder3DPainter) {
+            this.rebuilder3DPainter.updateFacelet(face, idx, this.rebuilderActiveBrush);
+          }
+          if (this.cubeUnfoldedNet) {
+            const tile = this.cubeUnfoldedNet.querySelector(`.facelet-tile[data-face="${face}"][data-index="${idx}"]`);
+            if (tile) {
+              const th = this.cube ? this.cube.theme : {};
+              tile.style.backgroundColor = th[this.rebuilderActiveBrush] || '#666';
+            }
+          }
+          this.validateRebuilderNet();
+        }
+      );
+    }
+
+    if (this.rebuilder3DPainter) {
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+    }
+
     this.rebuilderModal.classList.remove('hidden');
+    setTimeout(() => {
+      if (this.rebuilder3DPainter) this.rebuilder3DPainter.resize();
+    }, 60);
   }
 
   renderRebuilderPalette() {
@@ -1668,6 +2209,9 @@ class CubeApp {
           if (!this.rebuilderNet) return;
           this.rebuilderNet[face][i] = this.rebuilderActiveBrush;
           tile.style.backgroundColor = th[this.rebuilderActiveBrush] || '#666';
+          if (this.rebuilder3DPainter) {
+            this.rebuilder3DPainter.updateFacelet(face, i, this.rebuilderActiveBrush);
+          }
           this.validateRebuilderNet();
         });
 
@@ -1736,6 +2280,9 @@ class CubeApp {
     this.rebuilderNet = this.cube.getFaceletMap();
     this.renderRebuilderNet();
     this.validateRebuilderNet();
+    if (this.rebuilder3DPainter) {
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+    }
     this.showToast('📥 Loaded current 3D cube stickers into 2D net!');
   }
 
@@ -1751,6 +2298,9 @@ class CubeApp {
     };
     this.renderRebuilderNet();
     this.validateRebuilderNet();
+    if (this.rebuilder3DPainter) {
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+    }
     this.showToast('🔄 Net reset to solved cube pattern');
   }
 
@@ -1766,6 +2316,9 @@ class CubeApp {
     };
     this.renderRebuilderNet();
     this.validateRebuilderNet();
+    if (this.rebuilder3DPainter) {
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+    }
     this.showToast('🧹 Cleared net stickers to blank white');
   }
 
@@ -1794,6 +2347,262 @@ class CubeApp {
     if (andOpenSolver) {
       setTimeout(() => this.openSolverGuide(), 200);
     }
+  }
+
+  // =========================================================================
+  // Instant Solve (Least Moves / Optimal Algorithm) Controller
+  // =========================================================================
+  openInstantSolve() {
+    if (!this.instantSolveModal) return;
+
+    const faceletMap = this.cube.getFaceletMap();
+    const startTime = performance.now();
+    const result = window.OptimalSolver.solve(this.currentType, faceletMap);
+    const elapsed = Math.round(performance.now() - startTime);
+    if (!result.timeMs) result.timeMs = elapsed;
+
+    this.instantSolveResult = result;
+    this.instantMoveIdx = 0;
+    this.instantIsPlaying = false;
+    this.updateInstantPlayButton();
+
+    if (result.error) {
+      if (this.instantMoveCount) this.instantMoveCount.textContent = '⚠️ Unsolvable State';
+      if (this.instantSolveTime) this.instantSolveTime.textContent = `${result.timeMs}ms`;
+      if (this.instantSolveMethod) this.instantSolveMethod.textContent = result.method || 'Validator';
+      if (this.instantAlgorithmText) {
+        this.instantAlgorithmText.innerHTML = `<span style="color: #ef4444; font-weight: 600;">Error:</span> ${result.error}<br><small style="color: #94a3b8; margin-top: 6px; display: inline-block;">Please check physical cube stickers in the 3D Rebuilder to correct parity or color count.</small>`;
+      }
+      if (this.instantEfficiencyText) {
+        this.instantEfficiencyText.textContent = 'Invalid cube arrangement: check for twisted corners or flipped edges.';
+      }
+      if (this.instantTotalChips) this.instantTotalChips.textContent = '0';
+      if (this.instantCurrentIdx) this.instantCurrentIdx.textContent = '0';
+      if (this.instantMoveChips) this.instantMoveChips.innerHTML = '';
+      this.instantSolveModal.classList.remove('hidden');
+      return;
+    }
+
+    if (result.isSolved || result.moves.length === 0) {
+      if (this.instantMoveCount) this.instantMoveCount.textContent = '🎉 Solved (0 Moves)';
+      if (this.instantSolveTime) this.instantSolveTime.textContent = `${result.timeMs}ms`;
+      if (this.instantSolveMethod) this.instantSolveMethod.textContent = result.method;
+      if (this.instantAlgorithmText) {
+        this.instantAlgorithmText.textContent = 'The puzzle is already in a solved state!';
+      }
+      if (this.instantEfficiencyText) {
+        this.instantEfficiencyText.textContent = 'Zero moves needed. Enjoy the solved cube!';
+      }
+      if (this.instantTotalChips) this.instantTotalChips.textContent = '0';
+      if (this.instantCurrentIdx) this.instantCurrentIdx.textContent = '0';
+      if (this.instantMoveChips) this.instantMoveChips.innerHTML = '';
+      this.instantSolveModal.classList.remove('hidden');
+      return;
+    }
+
+    // Active optimal sequence
+    if (this.instantMoveCount) {
+      this.instantMoveCount.textContent = `⚡ ${result.moveCount} Moves (Optimal)`;
+    }
+    if (this.instantSolveTime) {
+      this.instantSolveTime.textContent = `Found in ${result.timeMs}ms`;
+    }
+    if (this.instantSolveMethod) {
+      this.instantSolveMethod.textContent = result.method;
+    }
+    if (this.instantAlgorithmText) {
+      this.instantAlgorithmText.textContent = result.algorithm;
+    }
+    if (this.instantEfficiencyText) {
+      if (this.currentType === 'cube2') {
+        this.instantEfficiencyText.textContent = `God's Algorithm BFS guarantee: solved in exactly ${result.moveCount} moves (optimal half-turn metric).`;
+      } else {
+        this.instantEfficiencyText.textContent = `God's Algorithm efficiency: standard CFOP averages 55-60 moves; this Two-Phase optimal path takes only ${result.moveCount} moves (~65% move reduction).`;
+      }
+    }
+    if (this.instantTotalChips) {
+      this.instantTotalChips.textContent = `${result.moves.length}`;
+    }
+
+    this.renderInstantMoveChips();
+    this.updateInstantChips();
+    this.instantSolveModal.classList.remove('hidden');
+  }
+
+  renderInstantMoveChips() {
+    if (!this.instantMoveChips || !this.instantSolveResult) return;
+    this.instantMoveChips.innerHTML = '';
+
+    this.instantSolveResult.moves.forEach((move, idx) => {
+      const chip = document.createElement('button');
+      chip.className = `move-chip ${idx === this.instantMoveIdx ? 'active' : ''}`;
+      chip.textContent = move;
+      chip.dataset.idx = idx;
+
+      chip.addEventListener('click', async () => {
+        if (this.instantIsPlaying) return;
+        if (idx > this.instantMoveIdx) {
+          while (this.instantMoveIdx < idx) {
+            await this.instantStepNext();
+          }
+        } else if (idx < this.instantMoveIdx) {
+          while (this.instantMoveIdx > idx) {
+            await this.instantStepPrev();
+          }
+        }
+      });
+
+      this.instantMoveChips.appendChild(chip);
+    });
+  }
+
+  updateInstantChips() {
+    if (!this.instantMoveChips) return;
+    const chips = this.instantMoveChips.querySelectorAll('.move-chip');
+    chips.forEach((chip, idx) => {
+      chip.classList.toggle('active', idx === this.instantMoveIdx);
+      chip.classList.toggle('done', idx < this.instantMoveIdx);
+    });
+    if (this.instantCurrentIdx) {
+      this.instantCurrentIdx.textContent = `${this.instantMoveIdx}`;
+    }
+    const activeChip = this.instantMoveChips.querySelector('.move-chip.active');
+    if (activeChip) {
+      activeChip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }
+
+  copyInstantAlgorithm() {
+    if (!this.instantSolveResult || !this.instantSolveResult.algorithm) return;
+    const text = this.instantSolveResult.algorithm;
+    navigator.clipboard.writeText(text).then(() => {
+      if (this.btnCopyInstantAlg) {
+        const orig = this.btnCopyInstantAlg.innerHTML;
+        this.btnCopyInstantAlg.innerHTML = '✅ Copied!';
+        setTimeout(() => {
+          if (this.btnCopyInstantAlg) this.btnCopyInstantAlg.innerHTML = orig;
+        }, 2000);
+      }
+      this.showToast('📋 Copied optimal algorithm to clipboard!');
+    }).catch(() => {
+      this.showToast(`Algorithm: ${text}`);
+    });
+  }
+
+  async instantStepNext() {
+    if (!this.instantSolveResult || !this.instantSolveResult.moves) return;
+    if (this.instantMoveIdx >= this.instantSolveResult.moves.length) {
+      this.instantIsPlaying = false;
+      this.updateInstantPlayButton();
+      return;
+    }
+
+    const rawMove = this.instantSolveResult.moves[this.instantMoveIdx];
+    const parsed = this.engine.parseMove(rawMove);
+    if (parsed) {
+      const sp = parseInt(this.instantSpeedSelect ? this.instantSpeedSelect.value : 200, 10);
+      this.cube.setSpeed(sp);
+      await this.cube.executeMove(parsed);
+      this.recordMoveToHistory(parsed, { targetColor: 'Optimal', targetColorHex: '#f59e0b' });
+    }
+
+    this.instantMoveIdx++;
+    this.updateInstantChips();
+
+    if (this.instantMoveIdx >= this.instantSolveResult.moves.length) {
+      this.instantIsPlaying = false;
+      this.updateInstantPlayButton();
+      this.showToast('🎉 Cube solved with optimal solution!');
+    }
+  }
+
+  async instantStepPrev() {
+    if (!this.instantSolveResult || !this.instantSolveResult.moves) return;
+    if (this.instantMoveIdx <= 0) return;
+
+    this.instantMoveIdx--;
+    const rawMove = this.instantSolveResult.moves[this.instantMoveIdx];
+    const invertedStr = this.invertMoveStr(rawMove);
+    const parsed = this.engine.parseMove(invertedStr);
+    if (parsed) {
+      const sp = parseInt(this.instantSpeedSelect ? this.instantSpeedSelect.value : 200, 10);
+      this.cube.setSpeed(sp);
+      await this.cube.executeMove(parsed);
+      this.recordMoveToHistory(parsed, { targetColor: 'Optimal Undo', targetColorHex: '#f59e0b' });
+    }
+
+    this.updateInstantChips();
+  }
+
+  async instantTogglePlay() {
+    if (this.instantIsPlaying) {
+      this.instantIsPlaying = false;
+      this.updateInstantPlayButton();
+      return;
+    }
+
+    if (!this.instantSolveResult || !this.instantSolveResult.moves) return;
+    if (this.instantMoveIdx >= this.instantSolveResult.moves.length) {
+      await this.instantReset();
+    }
+
+    this.instantIsPlaying = true;
+    this.updateInstantPlayButton();
+
+    while (this.instantIsPlaying && this.instantMoveIdx < this.instantSolveResult.moves.length) {
+      await this.instantStepNext();
+      if (this.instantMoveIdx < this.instantSolveResult.moves.length && this.instantIsPlaying) {
+        const sp = parseInt(this.instantSpeedSelect ? this.instantSpeedSelect.value : 200, 10);
+        const delay = Math.max(20, Math.floor(sp * 0.2));
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+
+    this.instantIsPlaying = false;
+    this.updateInstantPlayButton();
+  }
+
+  updateInstantPlayButton() {
+    if (!this.btnInstantPlay) return;
+    if (this.instantIsPlaying) {
+      if (this.instantPlayIcon) this.instantPlayIcon.textContent = '⏸';
+      if (this.instantPlayLabel) this.instantPlayLabel.textContent = 'Pause';
+    } else {
+      if (this.instantPlayIcon) this.instantPlayIcon.textContent = '▶';
+      if (this.instantPlayLabel) this.instantPlayLabel.textContent = 'Animate Solve';
+    }
+  }
+
+  async instantReset() {
+    this.instantIsPlaying = false;
+    this.updateInstantPlayButton();
+    if (!this.instantSolveResult || !this.instantSolveResult.moves) return;
+
+    const prevSpeed = this.cube.animationDuration;
+    this.cube.setSpeed(60);
+    while (this.instantMoveIdx > 0) {
+      await this.instantStepPrev();
+    }
+    this.cube.setSpeed(prevSpeed);
+  }
+
+  async instantJumpToSolved() {
+    this.instantIsPlaying = false;
+    this.updateInstantPlayButton();
+    if (!this.instantSolveResult || !this.instantSolveResult.moves) return;
+
+    const prevSpeed = this.cube.animationDuration;
+    this.cube.setSpeed(0);
+    while (this.instantMoveIdx < this.instantSolveResult.moves.length) {
+      await this.instantStepNext();
+    }
+    this.cube.setSpeed(prevSpeed);
+    this.showToast('⚡ Instantly jumped to solved state!');
+  }
+
+  recordMoveInHistory(parsed, rawMove) {
+    if (!parsed) return;
+    this.recordMoveToHistory(parsed, { targetColor: 'Step', targetColorHex: '#10b981' });
   }
 
   // =========================================================================

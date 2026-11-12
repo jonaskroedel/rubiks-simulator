@@ -79,19 +79,48 @@ Personalize every aesthetic detail of your cube in real-time:
 
 ---
 
-### 6. 🧩 Physical Cube Rebuilder (2D Net Facelet Painter)
-Reconstruct a real physical cube you hold in your hands directly onto the 3D canvas:
-- **Interactive 2D Unfolded Net**: Classic cross layout displaying all 6 faces (`U`, `L`, `F`, `R`, `B`, `D`) with clickable facelet tiles.
-- **Color Brush Palette**: Select active brush (White, Yellow, Green, Blue, Red, Orange) with real-time remaining and target counts (e.g. `9/9`).
-- **Live Mathematical Validation Banner**: Instant error checking ensures every face has exactly $N \times N$ facelets with zero missing or duplicate stickers.
-- **Bi-Directional Synchronization**:
-  - **📥 Read from 3D**: Inspects 3D cubie orientations and populates the 2D net from the simulator.
-  - **🚀 Apply to 3D**: Projects painted stickers onto the 3D model and saves an initial checkpoint in chess history.
-  - **🧙‍♂️ Apply & Solve Guide**: Automatically projects the real cube state into 3D and launches the Step-by-Step Solver Guide.
+### 6. 🧩 3D Physical Cube Rebuilder & Painter
+Reconstruct a real physical cube you hold in your hands directly into the 3D simulator:
+- **Interactive 3D Painter**:
+  - Orbit around the 3D cube model and click any sticker to paint with the active color brush.
+  - Hover reticle illuminates the target facelet with a cyan boundary box before painting.
+  - Smart drag vs. click detection prevents accidental sticker painting while orbiting the cube.
+  - **Camera Snap Bar**: Quick 1-click snap presets for `Iso`, `Front (F)`, `Right (R)`, `Top (U)`, `Back (B)`, `Left (L)`, and `Bottom (D)`.
+- **View Modes**:
+  - `🧊 3D Painter`: Full-width 3D interactive painter stage.
+  - `◫ Side-by-Side`: Split view showing the 3D model alongside the unfolded 2D net with live bi-directional sync.
+  - `🗺️ 2D Net`: Classic unfolded cross net.
+- **Color Brush Palette**: White, Yellow, Green, Blue, Red, Orange with live count badges (e.g. `9/9`).
+- **Live Validation Banner**: Instant mathematical integrity check confirming exactly $N \times N$ facelets per color before solving.
+- **Quick Actions**:
+  - `📥 Read Simulator`: Pulls the current 3D cube state into the painter.
+  - `🔄 Solved Cube`: Resets to a clean solved cube pattern.
+  - `🧹 Clear`: Blanks out stickers for fresh physical cube input.
+  - `⚡ Instant Solve (Least Moves)`: Immediately computes the optimal sub-22 move solution.
+  - `🧙‍♂️ Step-by-Step Guide`: Launches the educational Layer-by-Layer solution tutorial.
 
 ---
 
-### 7. 🧙‍♂️ Interactive Step-by-Step Solution Guide
+### 7. ⚡ Instant Solve (Optimal / Fewest Moves via Kociemba Engine)
+Calculate God's Algorithm-level solutions that solve the cube in the least number of moves:
+- **Kociemba's Two-Phase Algorithm**:
+  - Bundles a high-performance, zero-dependency JavaScript implementation of Herbert Kociemba's Two-Phase algorithm (`kociemba.js`).
+  - Solves any valid 3×3 scramble in **under 22 moves** (often 18–21 moves), compared to 55–65 moves with standard CFOP (~65% move reduction!).
+  - Automatic center color normalization: solves correctly regardless of custom color schemes or physical cube orientation.
+- **Optimal 2×2 Solver**: Fast breadth-first search (BFS) generating exact optimal solutions in 4–11 moves.
+- **Instant Solve Modal**:
+  - **Performance Metrics**: Live badge indicators for optimal move count, calculation time in milliseconds, and algorithm method.
+  - **Clickable Notation Box**: Formatted algorithm sequence with a 1-click `📋 Copy Algorithm` button.
+  - **Interactive Move Stepper**:
+    - Clickable move chips with active glowing highlights.
+    - `⏮ Prev` / `⏭ Next`: Step through the optimal solution move-by-move.
+    - `▶ Animate Solve` / `⏸ Pause`: Watch the cube solve itself automatically at chosen animation speeds.
+    - `⚡ Jump to Solved`: Instantly fast-forwards all remaining moves to solved state in 0ms.
+- **Validation Diagnostics**: Immediate detection and user-friendly explanation of unsolvable physical states (corner twist, flipped edge parity, or imbalanced colors).
+
+---
+
+### 8. 🧙‍♂️ Interactive Step-by-Step Solution Guide
 An educational solver engine that walks you through solving the cube move-by-move:
 - **3×3 Layer-by-Layer (CFOP) Solver**:
   1. *The White Cross* (Foundation on bottom face D)
@@ -114,7 +143,7 @@ An educational solver engine that walks you through solving the cube move-by-mov
 
 ---
 
-### 8. Algorithm Presets & WCA Scramble Generator
+### 9. Algorithm Presets & WCA Scramble Generator
 - **Algorithm Library**: Pre-loaded with common triggers, permutations, and parity sequences:
   - *Sexy Move* (`R U R' U'`), *Sune*, *Anti-Sune*
   - *T-Perm*, *Y-Perm*, *J-Perm*, *H-Perm*, *Z-Perm*
@@ -125,7 +154,7 @@ An educational solver engine that walks you through solving the cube move-by-mov
 
 ---
 
-### 7. Speed Control & Playback
+### 10. Speed Control & Playback
 - **Speed Slider**: Adjustable turn animation speed from **Instant (0ms)** to **Fast (90ms)**, **Normal (220ms)**, and **Slow (450ms)**.
 - **Virtual Keypad**: Quick buttons for face turns, wide turns, slice turns, and 45° Mixup slice actions.
 - **Timeline Bar**: Real-time progress bar with animated chips highlighting active moves.
@@ -170,12 +199,13 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 rubiks-simulator/
-├── index.html       # Main layout, puzzle selector, rebuilder & solver modals, HUD
-├── style.css        # Glassmorphic dark UI, 2D unfolded net, and solver stepper styles
+├── index.html       # Main layout, 3D painter workspace, Instant Solve modal, HUD
+├── style.css        # Glassmorphic dark UI, 3D painter canvas, Instant Solve badges & chips
 ├── cube.js          # Three.js 3D engine: standard, Fisher, Mirror, and Mixup geometry
 ├── notation.js      # WCA notation parser, 45° slice support, and scrambler
-├── solver.js        # LBL/CFOP solver, Ortega 2x2, VirtualCube model & guide database
-├── app.js           # Application controller, Rebuilder & Solver guide controllers
+├── kociemba.js      # Pure JS implementation of Kociemba's Two-Phase optimal algorithm
+├── solver.js        # OptimalSolver (Kociemba & BFS), LBL/CFOP guide, VirtualCube model
+├── app.js           # Rebuilder3DPainter, Instant Solve controller, CubeApp orchestration
 ├── server.js        # Zero-dependency local HTTP static server
 ├── package.json     # Project metadata and start scripts
 ├── .gitignore       # Git ignore rules

@@ -39,8 +39,11 @@
 
       <!-- Action Buttons -->
       <div class="header-actions">
-        <button id="btn-toggle-rebuilder" class="icon-btn highlight" title="Rebuild a Physical Cube you have in front of you">
-          <span>🧩</span> Rebuilder
+        <button id="btn-toggle-rebuilder" class="icon-btn highlight" title="3D Cube Rebuilder & Painter (Reconstruct real physical cube)">
+          <span>🧩</span> 3D Rebuilder
+        </button>
+        <button id="btn-instant-solve" class="icon-btn highlight-gold" title="Instant Solve with least moves (Optimal Kociemba Algorithm)">
+          <span>⚡</span> Instant Solve
         </button>
         <button id="btn-toggle-solver" class="icon-btn highlight" title="Interactive Step-by-Step Solution Guide">
           <span>🧙‍♂️</span> Solve Guide
@@ -288,6 +291,9 @@
 
             <!-- Actions -->
             <div class="utility-actions">
+              <button id="btn-dock-instant-solve" class="control-btn highlight-gold" title="Solve cube with least moves (Optimal Kociemba Algorithm)">
+                <span>⚡</span> Instant Solve
+              </button>
               <button id="btn-scramble" class="control-btn" title="Generate and execute a random scramble">
                 <span>🔀</span> Scramble
               </button>
@@ -634,15 +640,22 @@
       </div>
     </div>
 
-    <!-- Modal: Physical Cube Rebuilder (2D Net Facelet Painter) -->
+    <!-- Modal: Physical Cube Rebuilder (3D Painter + 2D Net) -->
     <div id="modal-rebuilder" class="modal-overlay hidden">
       <div class="modal-card rebuilder-card">
         <div class="modal-header">
           <div class="rebuilder-title-group">
-            <h3 class="modal-title">🧩 Physical Cube Rebuilder</h3>
-            <span class="rebuilder-subtitle">Paint your real cube's facelets onto the 2D net, then project it into 3D!</span>
+            <h3 class="modal-title">🧩 3D Physical Cube Rebuilder</h3>
+            <span class="rebuilder-subtitle">Rotate the 3D cube and click any sticker to paint directly in 3D!</span>
           </div>
-          <button id="btn-close-rebuilder" class="btn-close-modal">&times;</button>
+          <div class="rebuilder-header-right">
+            <div class="rebuilder-view-tabs">
+              <button id="btn-rebuilder-tab-3d" class="rebuilder-tab active" title="3D Interactive Cube View">🧊 3D Painter</button>
+              <button id="btn-rebuilder-tab-split" class="rebuilder-tab" title="Side-by-side 3D and 2D view">◫ Side-by-Side</button>
+              <button id="btn-rebuilder-tab-net" class="rebuilder-tab" title="Unfolded 2D net view">🗺️ 2D Net</button>
+            </div>
+            <button id="btn-close-rebuilder" class="btn-close-modal">&times;</button>
+          </div>
         </div>
 
         <div class="rebuilder-body">
@@ -656,10 +669,10 @@
             </div>
             <div class="rebuilder-quick-tools">
               <button id="btn-rebuilder-read-3d" class="util-btn" title="Extract current 3D cube state into net">
-                📥 Read from 3D
+                📥 Read Simulator
               </button>
               <button id="btn-rebuilder-reset-solved" class="util-btn" title="Reset net to standard solved pattern">
-                🔄 Solved Net
+                🔄 Solved Cube
               </button>
               <button id="btn-rebuilder-clear" class="util-btn" title="Clear all stickers to blank">
                 🧹 Clear
@@ -676,13 +689,40 @@
             </div>
           </div>
 
-          <!-- 2D Unfolded Net Cross -->
-          <div class="rebuilder-net-container">
-            <div class="net-diagram-hint">
-              <span>Click any facelet to paint with the active color brush. Faces: <strong>U</strong> (Top), <strong>L</strong> (Left), <strong>F</strong> (Front), <strong>R</strong> (Right), <strong>B</strong> (Back), <strong>D</strong> (Bottom).</span>
+          <!-- Rebuilder Workspace Stage -->
+          <div id="rebuilder-workspace" class="rebuilder-workspace mode-3d">
+            <!-- 3D Painter Stage -->
+            <div id="rebuilder-3d-pane" class="rebuilder-3d-pane">
+              <!-- Floating Camera Snap Bar -->
+              <div class="rebuilder-cam-bar">
+                <button class="cam-snap-btn" data-snap="iso">Iso</button>
+                <button class="cam-snap-btn" data-snap="front">Front (F)</button>
+                <button class="cam-snap-btn" data-snap="right">Right (R)</button>
+                <button class="cam-snap-btn" data-snap="top">Top (U)</button>
+                <button class="cam-snap-btn" data-snap="back">Back (B)</button>
+                <button class="cam-snap-btn" data-snap="left">Left (L)</button>
+                <button class="cam-snap-btn" data-snap="bottom">Bottom (D)</button>
+              </div>
+
+              <!-- 3D Canvas Mounting Container -->
+              <div id="rebuilder-3d-canvas-wrap" class="rebuilder-3d-canvas-wrap"></div>
+
+              <!-- View Hint -->
+              <div class="rebuilder-view-hint">
+                <span>🖱️ Drag to rotate view</span>
+                <span>•</span>
+                <span>🎯 Click sticker to paint with active brush</span>
+              </div>
             </div>
-            <div id="cube-unfolded-net" class="cube-unfolded-net">
-              <!-- 2D Net cross generated dynamically based on cube size (2x2, 3x3, 4x4) -->
+
+            <!-- 2D Net Pane -->
+            <div id="rebuilder-net-pane" class="rebuilder-net-pane">
+              <div class="net-diagram-hint">
+                <span>Click any facelet to paint with the active color brush. Faces: <strong>U</strong> (Top), <strong>L</strong> (Left), <strong>F</strong> (Front), <strong>R</strong> (Right), <strong>B</strong> (Back), <strong>D</strong> (Bottom).</span>
+              </div>
+              <div id="cube-unfolded-net" class="cube-unfolded-net">
+                <!-- 2D Net cross generated dynamically based on cube size (2x2, 3x3, 4x4) -->
+              </div>
             </div>
           </div>
         </div>
@@ -692,12 +732,100 @@
             <span class="puzzle-type-pill" id="rebuilder-puzzle-type-pill">3×3 Standard</span>
           </div>
           <div class="rebuilder-footer-actions">
-            <button id="btn-rebuilder-apply" class="btn-save-confirm" style="background: #2563eb;">
-              🚀 Apply to 3D Cube
+            <button id="btn-rebuilder-instant-solve" class="btn-save-confirm highlight-gold" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #000; font-weight: 700;">
+              ⚡ Instant Solve (Least Moves)
             </button>
             <button id="btn-rebuilder-apply-solve" class="btn-save-confirm highlight-solve" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-              🧙‍♂️ Apply & Solve Guide
+              🧙‍♂️ Step-by-Step Guide
             </button>
+            <button id="btn-rebuilder-apply" class="btn-save-confirm" style="background: #2563eb;">
+              🚀 Apply to 3D Simulator
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Instant Solve (Optimal / Fewest Moves) -->
+    <div id="modal-instant-solve" class="modal-overlay hidden">
+      <div class="modal-card instant-solve-card">
+        <div class="modal-header">
+          <div class="instant-title-group">
+            <h3 class="modal-title">⚡ Instant Solve (Fewest Moves)</h3>
+            <span class="instant-subtitle">Optimal solution calculated with Kociemba's Two-Phase Algorithm</span>
+          </div>
+          <button id="btn-close-instant" class="btn-close-modal">&times;</button>
+        </div>
+
+        <div class="instant-body">
+          <!-- Summary Metrics Badges -->
+          <div class="instant-badges-row">
+            <span id="instant-move-count" class="instant-count-pill">⚡ 21 Moves (Optimal)</span>
+            <span id="instant-solve-time" class="instant-time-pill">Found in 24ms</span>
+            <span id="instant-solve-method" class="instant-method-pill">Kociemba Two-Phase Algorithm</span>
+          </div>
+
+          <!-- Full Algorithm Card -->
+          <div class="instant-alg-card">
+            <div class="instant-alg-header">
+              <span class="instant-alg-label">Optimal Solving Sequence:</span>
+              <button id="btn-copy-instant-alg" class="btn-copy-alg" title="Copy notation to clipboard">
+                📋 Copy Notation
+              </button>
+            </div>
+            <div id="instant-algorithm-text" class="instant-alg-box">
+              <!-- Full algorithm string -->
+            </div>
+          </div>
+
+          <!-- Move Chips Stepper List -->
+          <div class="stage-moves-section">
+            <div class="stage-moves-header">
+              <span class="moves-count-label">Move Stepper (<span id="instant-total-chips">0</span> moves):</span>
+              <span class="moves-progress-label">Step <span id="instant-current-idx">0</span> of <span id="instant-total-idx">0</span></span>
+            </div>
+            <div id="instant-move-chips" class="stage-moves-chips">
+              <!-- Dynamically populated clickable chips -->
+            </div>
+          </div>
+
+          <!-- Execution Controls -->
+          <div class="solver-controls-toolbar">
+            <div class="solver-controls-left">
+              <button id="btn-instant-prev" class="stepper-btn" title="Undo / Step Back Move">
+                ⏮ Prev Move
+              </button>
+              <button id="btn-instant-play" class="stepper-btn primary" title="Play animated solution">
+                <span id="instant-play-icon">▶</span> <span id="instant-play-label">Animate Solve</span>
+              </button>
+              <button id="btn-instant-next" class="stepper-btn" title="Step Forward Move">
+                ⏭ Next Move
+              </button>
+              <button id="btn-instant-reset" class="stepper-btn" title="Reset to start of sequence">
+                🔄 Reset
+              </button>
+            </div>
+
+            <div class="solver-controls-right">
+              <label class="speed-label">Speed:</label>
+              <select id="instant-speed-select" class="solver-select">
+                <option value="0">Instant (0ms)</option>
+                <option value="90">Fast (90ms)</option>
+                <option value="200" selected>Normal (200ms)</option>
+                <option value="350">Slow (350ms)</option>
+              </select>
+              <button id="btn-instant-jump-solved" class="stepper-btn highlight-all" title="Instantly complete the solve in 0ms">
+                ⚡ Jump to Solved
+              </button>
+            </div>
+          </div>
+
+          <!-- Efficiency comparison card -->
+          <div class="instant-efficiency-card">
+            <span class="efficiency-icon">💡</span>
+            <span id="instant-efficiency-text" class="efficiency-text">
+              Kociemba Optimal algorithm solves in <strong>~20 moves</strong> compared to Layer-by-Layer beginner method (typically 50–70 moves), reducing turns by over <strong>60%</strong>!
+            </span>
           </div>
         </div>
       </div>
@@ -810,6 +938,7 @@
 
   <!-- Core Scripts -->
   <script src="notation.js"></script>
+  <script src="kociemba.js"></script>
   <script src="solver.js"></script>
   <script src="cube.js"></script>
   <script src="app.js"></script>
