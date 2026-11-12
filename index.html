@@ -39,7 +39,13 @@
 
       <!-- Action Buttons -->
       <div class="header-actions">
-        <button id="btn-toggle-designer" class="icon-btn highlight" title="Open Cube Designer & Theme Studio">
+        <button id="btn-toggle-rebuilder" class="icon-btn highlight" title="Rebuild a Physical Cube you have in front of you">
+          <span>🧩</span> Rebuilder
+        </button>
+        <button id="btn-toggle-solver" class="icon-btn highlight" title="Interactive Step-by-Step Solution Guide">
+          <span>🧙‍♂️</span> Solve Guide
+        </button>
+        <button id="btn-toggle-designer" class="icon-btn" title="Open Cube Designer & Theme Studio">
           <span>🎨</span> Designer
         </button>
         <button id="btn-toggle-history" class="icon-btn active" title="Toggle Move History & Saved States Sidebar">
@@ -627,10 +633,184 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal: Physical Cube Rebuilder (2D Net Facelet Painter) -->
+    <div id="modal-rebuilder" class="modal-overlay hidden">
+      <div class="modal-card rebuilder-card">
+        <div class="modal-header">
+          <div class="rebuilder-title-group">
+            <h3 class="modal-title">🧩 Physical Cube Rebuilder</h3>
+            <span class="rebuilder-subtitle">Paint your real cube's facelets onto the 2D net, then project it into 3D!</span>
+          </div>
+          <button id="btn-close-rebuilder" class="btn-close-modal">&times;</button>
+        </div>
+
+        <div class="rebuilder-body">
+          <!-- Top Toolbar: Palette & Quick Actions -->
+          <div class="rebuilder-toolbar">
+            <div class="rebuilder-palette-group">
+              <span class="toolbar-label">Active Brush:</span>
+              <div id="rebuilder-palette-pills" class="rebuilder-palette-pills">
+                <!-- Dynamically populated or static with face colors -->
+              </div>
+            </div>
+            <div class="rebuilder-quick-tools">
+              <button id="btn-rebuilder-read-3d" class="util-btn" title="Extract current 3D cube state into net">
+                📥 Read from 3D
+              </button>
+              <button id="btn-rebuilder-reset-solved" class="util-btn" title="Reset net to standard solved pattern">
+                🔄 Solved Net
+              </button>
+              <button id="btn-rebuilder-clear" class="util-btn" title="Clear all stickers to blank">
+                🧹 Clear
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Validation Banner -->
+          <div id="rebuilder-status-banner" class="rebuilder-status-banner valid">
+            <span class="status-icon">✅</span>
+            <div class="status-info">
+              <span id="rebuilder-status-text" class="status-text">Valid Cube: exactly 9 facelets per color</span>
+              <div id="rebuilder-status-details" class="status-details"></div>
+            </div>
+          </div>
+
+          <!-- 2D Unfolded Net Cross -->
+          <div class="rebuilder-net-container">
+            <div class="net-diagram-hint">
+              <span>Click any facelet to paint with the active color brush. Faces: <strong>U</strong> (Top), <strong>L</strong> (Left), <strong>F</strong> (Front), <strong>R</strong> (Right), <strong>B</strong> (Back), <strong>D</strong> (Bottom).</span>
+            </div>
+            <div id="cube-unfolded-net" class="cube-unfolded-net">
+              <!-- 2D Net cross generated dynamically based on cube size (2x2, 3x3, 4x4) -->
+            </div>
+          </div>
+        </div>
+
+        <div class="rebuilder-footer">
+          <div class="rebuilder-footer-left">
+            <span class="puzzle-type-pill" id="rebuilder-puzzle-type-pill">3×3 Standard</span>
+          </div>
+          <div class="rebuilder-footer-actions">
+            <button id="btn-rebuilder-apply" class="btn-save-confirm" style="background: #2563eb;">
+              🚀 Apply to 3D Cube
+            </button>
+            <button id="btn-rebuilder-apply-solve" class="btn-save-confirm highlight-solve" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+              🧙‍♂️ Apply & Solve Guide
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Step-by-Step Solver Guide -->
+    <div id="modal-solver-guide" class="modal-overlay hidden">
+      <div class="modal-card solver-guide-card">
+        <div class="modal-header">
+          <div class="solver-title-group">
+            <h3 class="modal-title">🧙‍♂️ Step-by-Step Solution Guide</h3>
+            <span id="solver-puzzle-badge" class="solver-badge">3×3 CFOP / Beginner Method</span>
+          </div>
+          <div class="solver-header-controls">
+            <span id="solver-total-moves" class="solver-moves-pill">0 moves total</span>
+            <button id="btn-close-solver" class="btn-close-modal">&times;</button>
+          </div>
+        </div>
+
+        <div class="solver-body">
+          <!-- Stage Stepper Pills / Tabs -->
+          <div id="solver-stage-tabs" class="solver-stage-tabs">
+            <!-- Populated dynamically with stage tabs (1..7) -->
+          </div>
+
+          <!-- Active Stage Main Card -->
+          <div class="solver-active-stage-card">
+            <div class="stage-card-header">
+              <div class="stage-title-wrap">
+                <span id="stage-badge" class="stage-badge">Step 1</span>
+                <h4 id="stage-title" class="stage-title">The White Cross</h4>
+              </div>
+              <div id="stage-alg-ref" class="stage-alg-ref" title="Algorithm Notation">
+                <code>F2 or U' R' F R</code>
+              </div>
+            </div>
+
+            <div class="stage-description-box">
+              <div class="stage-goal-row">
+                <span class="goal-label">🎯 Goal:</span>
+                <span id="stage-goal-text" class="goal-text">Form a white cross on the bottom face with matching side colors.</span>
+              </div>
+              <div class="stage-coach-row">
+                <span class="coach-icon">💡</span>
+                <p id="stage-coach-text" class="coach-text">Inspect your physical cube for white edges...</p>
+              </div>
+            </div>
+
+            <!-- Move Chips Stepper List -->
+            <div class="stage-moves-section">
+              <div class="stage-moves-header">
+                <span class="moves-count-label">Moves for this Step (<span id="stage-move-count">0</span> moves):</span>
+                <span class="moves-progress-label">Step <span id="stage-current-move-idx">0</span> of <span id="stage-total-moves-in-stage">0</span></span>
+              </div>
+              <div id="stage-moves-chips" class="stage-moves-chips">
+                <!-- Dynamically populated clickable move chips -->
+              </div>
+            </div>
+
+            <!-- Interactive Playback & Stepping Controls -->
+            <div class="solver-controls-toolbar">
+              <div class="solver-controls-left">
+                <button id="btn-solver-prev" class="stepper-btn" title="Undo / Step Back Move">
+                  ⏮ Prev Move
+                </button>
+                <button id="btn-solver-play" class="stepper-btn primary" title="Play / Pause current stage">
+                  <span id="solver-play-icon">▶</span> <span id="solver-play-label">Play Step</span>
+                </button>
+                <button id="btn-solver-next" class="stepper-btn" title="Step Forward Move">
+                  ⏭ Next Move
+                </button>
+                <button id="btn-solver-reset-stage" class="stepper-btn" title="Reset to start of this stage">
+                  🔄 Reset Step
+                </button>
+              </div>
+
+              <div class="solver-controls-right">
+                <label class="speed-label">Speed:</label>
+                <select id="solver-speed-select" class="solver-select">
+                  <option value="450">Slow (0.5×)</option>
+                  <option value="250" selected>Normal (1×)</option>
+                  <option value="100">Fast (2.5×)</option>
+                </select>
+                <button id="btn-solver-solve-all" class="stepper-btn highlight-all" title="Execute all remaining steps sequentially on 3D cube">
+                  ⚡ Auto-Solve All
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Special Puzzle Coach Drawer / Parity Center (for Mirror, Fisher, Mixup, 4x4) -->
+          <div id="special-puzzle-coach" class="special-puzzle-coach">
+            <div class="coach-accordion-header" id="coach-accordion-toggle">
+              <div class="coach-header-left">
+                <span class="coach-icon">🧩</span>
+                <span class="coach-acc-title">Specialized Puzzle Strategies & Parity Solutions</span>
+              </div>
+              <span id="coach-acc-chevron" class="coach-acc-chevron">▼</span>
+            </div>
+            <div id="coach-accordion-content" class="coach-accordion-content">
+              <div id="coach-tips-container" class="coach-tips-grid">
+                <!-- Dynamically loaded coaching tips, shape cues, and parity buttons -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Core Scripts -->
   <script src="notation.js"></script>
+  <script src="solver.js"></script>
   <script src="cube.js"></script>
   <script src="app.js"></script>
 </body>

@@ -28,6 +28,16 @@ class CubeApp {
     // Saved States / Bookmarks
     this.savedStates = this.loadSavedStatesFromStorage();
 
+    // Physical Cube Rebuilder State
+    this.rebuilderActiveBrush = 'U';
+    this.rebuilderNet = null;
+
+    // Step-by-Step Solver Guide State
+    this.solverStages = [];
+    this.solverActiveStageIdx = 0;
+    this.solverActiveMoveIdx = 0;
+    this.solverIsPlaying = false;
+
     // Theme Presets Catalog
     this.initThemePresets();
 
@@ -117,6 +127,50 @@ class CubeApp {
     this.btnToggleHistory = document.getElementById('btn-toggle-history');
     this.headerHistoryCount = document.getElementById('header-history-count');
     this.btnToggleDesigner = document.getElementById('btn-toggle-designer');
+    this.btnToggleRebuilder = document.getElementById('btn-toggle-rebuilder');
+    this.btnToggleSolver = document.getElementById('btn-toggle-solver');
+
+    // Physical Cube Rebuilder Elements
+    this.rebuilderModal = document.getElementById('modal-rebuilder');
+    this.btnCloseRebuilder = document.getElementById('btn-close-rebuilder');
+    this.btnRebuilderRead3D = document.getElementById('btn-rebuilder-read-3d');
+    this.btnRebuilderResetSolved = document.getElementById('btn-rebuilder-reset-solved');
+    this.btnRebuilderClear = document.getElementById('btn-rebuilder-clear');
+    this.btnRebuilderApply = document.getElementById('btn-rebuilder-apply');
+    this.btnRebuilderApplySolve = document.getElementById('btn-rebuilder-apply-solve');
+    this.rebuilderStatusBanner = document.getElementById('rebuilder-status-banner');
+    this.rebuilderStatusText = document.getElementById('rebuilder-status-text');
+    this.rebuilderStatusDetails = document.getElementById('rebuilder-status-details');
+    this.cubeUnfoldedNet = document.getElementById('cube-unfolded-net');
+    this.rebuilderPalettePills = document.getElementById('rebuilder-palette-pills');
+    this.rebuilderPuzzleTypePill = document.getElementById('rebuilder-puzzle-type-pill');
+
+    // Step-by-Step Solver Guide Elements
+    this.solverModal = document.getElementById('modal-solver-guide');
+    this.btnCloseSolver = document.getElementById('btn-close-solver');
+    this.solverStageTabs = document.getElementById('solver-stage-tabs');
+    this.stageBadge = document.getElementById('stage-badge');
+    this.stageTitle = document.getElementById('stage-title');
+    this.stageAlgRef = document.getElementById('stage-alg-ref');
+    this.stageGoalText = document.getElementById('stage-goal-text');
+    this.stageCoachText = document.getElementById('stage-coach-text');
+    this.stageMoveCount = document.getElementById('stage-move-count');
+    this.stageCurrentMoveIdx = document.getElementById('stage-current-move-idx');
+    this.stageTotalMovesInStage = document.getElementById('stage-total-moves-in-stage');
+    this.stageMovesChips = document.getElementById('stage-moves-chips');
+    this.btnSolverPrev = document.getElementById('btn-solver-prev');
+    this.btnSolverPlay = document.getElementById('btn-solver-play');
+    this.btnSolverNext = document.getElementById('btn-solver-next');
+    this.btnSolverResetStage = document.getElementById('btn-solver-reset-stage');
+    this.btnSolverSolveAll = document.getElementById('btn-solver-solve-all');
+    this.solverSpeedSelect = document.getElementById('solver-speed-select');
+    this.solverTotalMoves = document.getElementById('solver-total-moves');
+    this.solverPuzzleBadge = document.getElementById('solver-puzzle-badge');
+    this.solverPlayIcon = document.getElementById('solver-play-icon');
+    this.solverPlayLabel = document.getElementById('solver-play-label');
+    this.specialPuzzleCoach = document.getElementById('special-puzzle-coach');
+    this.coachAccordionToggle = document.getElementById('coach-accordion-toggle');
+    this.coachTipsContainer = document.getElementById('coach-tips-container');
 
     // Orientation HUD
     this.btnToggleViewMode = document.getElementById('btn-toggle-view-mode');
@@ -346,6 +400,99 @@ class CubeApp {
       this.btnApplyDesigner.addEventListener('click', () => {
         this.designerModal.classList.add('hidden');
         this.showToast('Custom theme applied!');
+      });
+    }
+
+    // Physical Cube Rebuilder Events
+    if (this.btnToggleRebuilder && this.rebuilderModal) {
+      this.btnToggleRebuilder.addEventListener('click', () => {
+        this.openRebuilder();
+      });
+    }
+
+    if (this.btnCloseRebuilder && this.rebuilderModal) {
+      this.btnCloseRebuilder.addEventListener('click', () => {
+        this.rebuilderModal.classList.add('hidden');
+      });
+    }
+
+    if (this.btnRebuilderRead3D) {
+      this.btnRebuilderRead3D.addEventListener('click', () => {
+        this.rebuilderReadFrom3D();
+      });
+    }
+
+    if (this.btnRebuilderResetSolved) {
+      this.btnRebuilderResetSolved.addEventListener('click', () => {
+        this.rebuilderResetSolved();
+      });
+    }
+
+    if (this.btnRebuilderClear) {
+      this.btnRebuilderClear.addEventListener('click', () => {
+        this.rebuilderClear();
+      });
+    }
+
+    if (this.btnRebuilderApply) {
+      this.btnRebuilderApply.addEventListener('click', () => {
+        this.rebuilderApplyTo3D(false);
+      });
+    }
+
+    if (this.btnRebuilderApplySolve) {
+      this.btnRebuilderApplySolve.addEventListener('click', () => {
+        this.rebuilderApplyTo3D(true);
+      });
+    }
+
+    // Step-by-Step Solver Guide Events
+    if (this.btnToggleSolver && this.solverModal) {
+      this.btnToggleSolver.addEventListener('click', () => {
+        this.openSolverGuide();
+      });
+    }
+
+    if (this.btnCloseSolver && this.solverModal) {
+      this.btnCloseSolver.addEventListener('click', () => {
+        this.solverIsPlaying = false;
+        this.solverModal.classList.add('hidden');
+      });
+    }
+
+    if (this.btnSolverPrev) {
+      this.btnSolverPrev.addEventListener('click', () => {
+        this.solverStepPrev();
+      });
+    }
+
+    if (this.btnSolverPlay) {
+      this.btnSolverPlay.addEventListener('click', () => {
+        this.solverTogglePlay();
+      });
+    }
+
+    if (this.btnSolverNext) {
+      this.btnSolverNext.addEventListener('click', () => {
+        this.solverStepNext();
+      });
+    }
+
+    if (this.btnSolverResetStage) {
+      this.btnSolverResetStage.addEventListener('click', () => {
+        this.solverResetCurrentStage();
+      });
+    }
+
+    if (this.btnSolverSolveAll) {
+      this.btnSolverSolveAll.addEventListener('click', () => {
+        this.solverAutoSolveAll();
+      });
+    }
+
+    if (this.coachAccordionToggle && this.specialPuzzleCoach) {
+      this.coachAccordionToggle.addEventListener('click', () => {
+        this.specialPuzzleCoach.classList.toggle('collapsed');
       });
     }
 
@@ -1408,6 +1555,713 @@ class CubeApp {
       toast.classList.add('fade-out');
       setTimeout(() => toast.remove(), 300);
     }, 2400);
+  }
+
+  // =========================================================================
+  // Physical Cube Rebuilder (2D Net Facelet Painter) Logic
+  // =========================================================================
+  openRebuilder() {
+    if (!this.rebuilderModal) return;
+    const typeNames = {
+      cube2: '2×2 Pocket Cube',
+      cube3: '3×3 Standard Cube',
+      cube4: '4×4 Rubik\'s Revenge',
+      mirror: '🪞 Mirror / Bump Cube',
+      fisher: '🐟 Tony Fisher 45° Cube',
+      mixup: '🔀 WitEden & Oskar Mixup 3×3'
+    };
+    if (this.rebuilderPuzzleTypePill) {
+      this.rebuilderPuzzleTypePill.textContent = typeNames[this.currentType] || `${this.currentSize}×${this.currentSize}`;
+    }
+
+    const N = this.currentSize;
+    if (!this.rebuilderNet || !this.rebuilderNet.U || this.rebuilderNet.U.length !== N * N) {
+      this.rebuilderNet = this.cube.getFaceletMap();
+    }
+
+    this.renderRebuilderPalette();
+    this.renderRebuilderNet();
+    this.validateRebuilderNet();
+    this.rebuilderModal.classList.remove('hidden');
+  }
+
+  renderRebuilderPalette() {
+    if (!this.rebuilderPalettePills) return;
+    this.rebuilderPalettePills.innerHTML = '';
+
+    const th = this.cube ? this.cube.theme : {
+      U: '#F7F8FA', D: '#FFD500', F: '#009E48', B: '#0046AD', R: '#C41230', L: '#FF5500'
+    };
+
+    const paletteDefs = [
+      { id: 'U', name: 'White (U)', hex: th.U || '#F7F8FA' },
+      { id: 'D', name: 'Yellow (D)', hex: th.D || '#FFD500' },
+      { id: 'F', name: 'Green (F)', hex: th.F || '#009E48' },
+      { id: 'B', name: 'Blue (B)', hex: th.B || '#0046AD' },
+      { id: 'R', name: 'Red (R)', hex: th.R || '#C41230' },
+      { id: 'L', name: 'Orange (L)', hex: th.L || '#FF5500' }
+    ];
+
+    paletteDefs.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = `palette-brush-btn ${this.rebuilderActiveBrush === p.id ? 'active' : ''}`;
+      btn.dataset.brush = p.id;
+      btn.innerHTML = `
+        <span class="swatch-dot" style="background: ${p.hex};"></span>
+        <span>${p.name}</span>
+        <span class="palette-count-badge" id="brush-count-${p.id}">0</span>
+      `;
+      btn.addEventListener('click', () => {
+        this.rebuilderActiveBrush = p.id;
+        this.rebuilderPalettePills.querySelectorAll('.palette-brush-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+      this.rebuilderPalettePills.appendChild(btn);
+    });
+  }
+
+  renderRebuilderNet() {
+    if (!this.cubeUnfoldedNet) return;
+    this.cubeUnfoldedNet.innerHTML = '';
+    const N = this.currentSize;
+
+    const th = this.cube ? this.cube.theme : {
+      U: '#F7F8FA', D: '#FFD500', F: '#009E48', B: '#0046AD', R: '#C41230', L: '#FF5500'
+    };
+
+    const faceNames = {
+      U: 'U (Top)',
+      L: 'L (Left)',
+      F: 'F (Front)',
+      R: 'R (Right)',
+      B: 'B (Back)',
+      D: 'D (Bottom)'
+    };
+
+    const faces = ['U', 'L', 'F', 'R', 'B', 'D'];
+
+    faces.forEach(face => {
+      const card = document.createElement('div');
+      card.className = 'net-face-card';
+      card.dataset.face = face;
+
+      const title = document.createElement('div');
+      title.className = 'net-face-title';
+      title.textContent = faceNames[face];
+      card.appendChild(title);
+
+      const grid = document.createElement('div');
+      grid.className = 'facelet-grid';
+      grid.style.gridTemplateColumns = `repeat(${N}, 26px)`;
+      grid.style.gridTemplateRows = `repeat(${N}, 26px)`;
+
+      for (let i = 0; i < N * N; i++) {
+        const tile = document.createElement('div');
+        tile.className = 'facelet-tile';
+        tile.dataset.face = face;
+        tile.dataset.index = i;
+
+        const val = (this.rebuilderNet && this.rebuilderNet[face]) ? this.rebuilderNet[face][i] : face;
+        tile.style.backgroundColor = th[val] || '#666';
+
+        tile.addEventListener('click', () => {
+          if (!this.rebuilderNet) return;
+          this.rebuilderNet[face][i] = this.rebuilderActiveBrush;
+          tile.style.backgroundColor = th[this.rebuilderActiveBrush] || '#666';
+          this.validateRebuilderNet();
+        });
+
+        grid.appendChild(tile);
+      }
+
+      card.appendChild(grid);
+      this.cubeUnfoldedNet.appendChild(card);
+    });
+  }
+
+  validateRebuilderNet() {
+    if (!this.rebuilderNet) return false;
+    const N = this.currentSize;
+    const targetCount = N * N;
+    const counts = { U: 0, D: 0, F: 0, B: 0, R: 0, L: 0 };
+
+    for (const f of ['U', 'D', 'F', 'B', 'R', 'L']) {
+      const arr = this.rebuilderNet[f] || [];
+      for (const val of arr) {
+        if (counts[val] !== undefined) counts[val]++;
+      }
+    }
+
+    for (const f of ['U', 'D', 'F', 'B', 'R', 'L']) {
+      const el = document.getElementById(`brush-count-${f}`);
+      if (el) {
+        const c = counts[f];
+        el.textContent = `${c}/${targetCount}`;
+        el.style.color = c === targetCount ? '#34d399' : (c > targetCount ? '#ef4444' : '#f59e0b');
+      }
+    }
+
+    let isValid = true;
+    const diffs = [];
+    for (const f of ['U', 'D', 'F', 'B', 'R', 'L']) {
+      if (counts[f] !== targetCount) {
+        isValid = false;
+        const diff = counts[f] - targetCount;
+        diffs.push(`${f}: ${counts[f]}/${targetCount} (${diff > 0 ? '+' : ''}${diff})`);
+      }
+    }
+
+    if (this.rebuilderStatusBanner && this.rebuilderStatusText) {
+      if (isValid) {
+        this.rebuilderStatusBanner.className = 'rebuilder-status-banner valid';
+        this.rebuilderStatusBanner.querySelector('.status-icon').textContent = '✅';
+        this.rebuilderStatusText.textContent = `Valid Cube State: exactly ${targetCount} facelets per color!`;
+        if (this.rebuilderStatusDetails) {
+          this.rebuilderStatusDetails.textContent = 'All faces mathematically balanced. Ready to apply to 3D and solve.';
+        }
+      } else {
+        this.rebuilderStatusBanner.className = 'rebuilder-status-banner invalid';
+        this.rebuilderStatusBanner.querySelector('.status-icon').textContent = '⚠️';
+        this.rebuilderStatusText.textContent = `Imbalanced Stickers (each color requires ${targetCount} facelets)`;
+        if (this.rebuilderStatusDetails) {
+          this.rebuilderStatusDetails.textContent = diffs.join(' • ');
+        }
+      }
+    }
+
+    return isValid;
+  }
+
+  rebuilderReadFrom3D() {
+    this.rebuilderNet = this.cube.getFaceletMap();
+    this.renderRebuilderNet();
+    this.validateRebuilderNet();
+    this.showToast('📥 Loaded current 3D cube stickers into 2D net!');
+  }
+
+  rebuilderResetSolved() {
+    const N = this.currentSize;
+    this.rebuilderNet = {
+      U: Array(N * N).fill('U'),
+      D: Array(N * N).fill('D'),
+      F: Array(N * N).fill('F'),
+      B: Array(N * N).fill('B'),
+      R: Array(N * N).fill('R'),
+      L: Array(N * N).fill('L')
+    };
+    this.renderRebuilderNet();
+    this.validateRebuilderNet();
+    this.showToast('🔄 Net reset to solved cube pattern');
+  }
+
+  rebuilderClear() {
+    const N = this.currentSize;
+    this.rebuilderNet = {
+      U: Array(N * N).fill('U'),
+      D: Array(N * N).fill('U'),
+      F: Array(N * N).fill('U'),
+      B: Array(N * N).fill('U'),
+      R: Array(N * N).fill('U'),
+      L: Array(N * N).fill('U')
+    };
+    this.renderRebuilderNet();
+    this.validateRebuilderNet();
+    this.showToast('🧹 Cleared net stickers to blank white');
+  }
+
+  rebuilderApplyTo3D(andOpenSolver = false) {
+    if (!this.rebuilderNet) return;
+    this.cube.applyFaceletMap(this.rebuilderNet);
+
+    this.history = [{
+      index: 0,
+      raw: 'Rebuild',
+      name: 'Physical Cube Reconstructed',
+      targetColor: 'White',
+      targetColorHex: this.cube ? this.cube.theme.U : '#F7F8FA',
+      snapshot: this.cube.saveSnapshot(),
+      timestamp: Date.now()
+    }];
+    this.historyPointer = 0;
+    this.renderChessHistory();
+
+    if (this.rebuilderModal) {
+      this.rebuilderModal.classList.add('hidden');
+    }
+
+    this.showToast('🚀 Physical Cube net projected to 3D simulator!');
+
+    if (andOpenSolver) {
+      setTimeout(() => this.openSolverGuide(), 200);
+    }
+  }
+
+  // =========================================================================
+  // Interactive Step-by-Step Solution Guide Controller
+  // =========================================================================
+  openSolverGuide() {
+    if (!this.solverModal) return;
+
+    const GuideDB = window.PUZZLE_GUIDES;
+    const guideInfo = (GuideDB && GuideDB[this.currentType]) ? GuideDB[this.currentType] : (GuideDB ? GuideDB.cube3 : null);
+
+    if (this.solverPuzzleBadge && guideInfo) {
+      this.solverPuzzleBadge.textContent = `${guideInfo.title} (${guideInfo.difficulty})`;
+    }
+
+    this.solverStages = [];
+    if (this.currentType === 'cube2') {
+      const solver2 = new window.Cube2Solver();
+      this.solverStages = solver2.generateGuide();
+    } else if (this.currentType === 'cube3' || this.currentType === 'mirror' || this.currentType === 'fisher') {
+      const faceletMap = this.cube.getFaceletMap();
+      const vCube = window.VirtualCube.fromFaceletMap(faceletMap);
+      const lbl = new window.LBLSolver(vCube);
+      this.solverStages = lbl.solve();
+    } else if (this.currentType === 'cube4') {
+      this.solverStages = [
+        {
+          id: 'cube4_centers',
+          title: 'Step 1: Solve 6 Center Blocks',
+          badge: 'Centers',
+          goal: 'Build 2×2 solid color center blocks on each of the 6 faces.',
+          explanation: 'Form 1×2 center bars using inner slice turns (r, l, u, d) and pair them up. Standard color order: White opposite Yellow, Green opposite Blue, Red opposite Orange.',
+          algReference: 'Slice Commutator: Rw U Rw\'',
+          moves: ['Rw', 'U', "Rw'"],
+          moveCount: 3
+        },
+        {
+          id: 'cube4_edges',
+          title: 'Step 2: Pair 12 Composite Edge Wings',
+          badge: 'Edges',
+          goal: 'Pair up the 24 edge wings into 12 composite edge pairs.',
+          explanation: 'Find matching edge wings and place them in the front-left and front-right slots. Use slice-flip-slice commutators to pair them together without disturbing solved centers.',
+          algReference: 'Uw\' (R U R\' F R\' F\' R) Uw',
+          moves: ["Uw'", 'R', 'U', "R'", 'F', "R'", "F'", 'R', 'Uw'],
+          moveCount: 9
+        },
+        {
+          id: 'cube4_3x3',
+          title: 'Step 3: 3×3 Reduction Solve',
+          badge: '3×3 Stage',
+          goal: 'With centers and edges paired, solve using standard 3×3 CFOP moves.',
+          explanation: 'Treat outer slices like a standard 3×3: solve White Cross, F2L corner-edge pairs, and OLL.',
+          algReference: 'Standard 3×3 CFOP',
+          moves: ['R', 'U', "R'", 'U', 'R', 'U2', "R'"],
+          moveCount: 7
+        },
+        {
+          id: 'cube4_parity',
+          title: 'Step 4: OLL & PLL Parity Resolution',
+          badge: 'Parities',
+          goal: 'Fix 4×4 specific parity states (single flipped edge or two swapped opposite edges).',
+          explanation: 'If a single edge wing is inverted (impossible on 3×3), execute OLL Parity. If two opposite edges need to be swapped at the end, execute PLL Parity.',
+          algReference: 'PLL Parity: 2R2 U2 2R2 Uw2 2R2 Uw2',
+          moves: ['2R2', 'U2', '2R2', 'Uw2', '2R2', 'Uw2'],
+          moveCount: 6
+        }
+      ];
+    } else if (this.currentType === 'mixup') {
+      this.solverStages = [
+        {
+          id: 'mixup_phase1',
+          title: 'Phase 1: Shape Restoration (45° Slices)',
+          badge: 'Shape Mod',
+          goal: 'Return all tilted pieces back to standard cubic form using 45° slice commutators.',
+          explanation: 'On the Mixup 3×3, 45° middle slice turns (M45, E45, S45) allow centers and edges to swap places. Restore cubic shape by pairing edges back into edge tracks.',
+          algReference: 'M45 M45 U2 M45\' M45\' U2',
+          moves: ['M45', 'M45', 'U2', "M45'", "M45'", 'U2'],
+          moveCount: 6
+        },
+        {
+          id: 'mixup_phase2',
+          title: 'Phase 2: Center-Edge Orbit Routing',
+          badge: 'Orbits',
+          goal: 'Swap displaced centers out of edge slots and return each center to its face.',
+          explanation: 'Once cubic shape is restored, some face centers may still sit in edge locations. Execute 45° commutators to route each center stone home.',
+          algReference: 'M45 U2 M45\' U2',
+          moves: ['M45', 'U2', "M45'", 'U2'],
+          moveCount: 4
+        },
+        {
+          id: 'mixup_phase3',
+          title: 'Phase 3: Standard 3×3 Finish & Parity',
+          badge: 'Finish',
+          goal: 'Solve the remaining permutation using standard 3×3 layer-by-layer algorithms.',
+          explanation: 'If an odd parity permutation appears on the last layer, perform a single M45 slice swap to flip permutation parity, then resolve.',
+          algReference: 'R U R\' U R U2 R\'',
+          moves: ['R', 'U', "R'", 'U', 'R', 'U2', "R'"],
+          moveCount: 7
+        }
+      ];
+    }
+
+    let totalMoves = 0;
+    this.solverStages.forEach(s => totalMoves += (s.moves ? s.moves.length : 0));
+    if (this.solverTotalMoves) {
+      this.solverTotalMoves.textContent = `${totalMoves} moves total (${this.solverStages.length} steps)`;
+    }
+
+    this.renderSolverStageTabs();
+    this.renderSpecialPuzzleCoach(this.currentType);
+    this.selectSolverStage(0);
+
+    this.solverModal.classList.remove('hidden');
+  }
+
+  renderSolverStageTabs() {
+    if (!this.solverStageTabs) return;
+    this.solverStageTabs.innerHTML = '';
+
+    this.solverStages.forEach((stage, idx) => {
+      const btn = document.createElement('button');
+      btn.className = `stage-tab-btn ${idx === this.solverActiveStageIdx ? 'active' : ''}`;
+      btn.dataset.stageIdx = idx;
+      btn.innerHTML = `
+        <span>${stage.badge || `Step ${idx + 1}`}</span>
+        <span class="stage-tab-count">(${stage.moves ? stage.moves.length : 0}m)</span>
+      `;
+      btn.addEventListener('click', () => {
+        this.selectSolverStage(idx);
+      });
+      this.solverStageTabs.appendChild(btn);
+    });
+  }
+
+  selectSolverStage(stageIdx) {
+    if (stageIdx < 0 || stageIdx >= this.solverStages.length) return;
+    this.solverActiveStageIdx = stageIdx;
+    this.solverActiveMoveIdx = 0;
+    this.solverIsPlaying = false;
+    this.updateSolverPlayButton();
+
+    if (this.solverStageTabs) {
+      this.solverStageTabs.querySelectorAll('.stage-tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', i === stageIdx);
+      });
+    }
+
+    const stage = this.solverStages[stageIdx];
+    if (!stage) return;
+
+    if (this.stageBadge) this.stageBadge.textContent = stage.badge || `Step ${stageIdx + 1}`;
+    if (this.stageTitle) this.stageTitle.textContent = stage.title || '';
+    if (this.stageAlgRef) this.stageAlgRef.innerHTML = `<code>${stage.algReference || 'Notation Guide'}</code>`;
+    if (this.stageGoalText) this.stageGoalText.textContent = stage.goal || '';
+    if (this.stageCoachText) this.stageCoachText.textContent = stage.explanation || '';
+    if (this.stageMoveCount) this.stageMoveCount.textContent = stage.moves ? stage.moves.length : 0;
+
+    this.renderStageMoveChips();
+  }
+
+  renderStageMoveChips() {
+    if (!this.stageMovesChips) return;
+    this.stageMovesChips.innerHTML = '';
+
+    const stage = this.solverStages[this.solverActiveStageIdx];
+    const moves = (stage && stage.moves) ? stage.moves : [];
+
+    if (this.stageCurrentMoveIdx) this.stageCurrentMoveIdx.textContent = this.solverActiveMoveIdx;
+    if (this.stageTotalMovesInStage) this.stageTotalMovesInStage.textContent = moves.length;
+
+    if (moves.length === 0) {
+      this.stageMovesChips.innerHTML = '<span style="font-size: 12px; color: var(--text-dim); padding: 4px;">No moves required for this stage (already aligned!)</span>';
+      return;
+    }
+
+    moves.forEach((m, idx) => {
+      const chip = document.createElement('button');
+      chip.className = `move-chip ${idx === this.solverActiveMoveIdx ? 'active' : ''} ${idx < this.solverActiveMoveIdx ? 'done' : ''}`;
+      chip.textContent = m;
+      chip.dataset.idx = idx;
+
+      chip.addEventListener('click', async () => {
+        if (this.cube.isAnimating) return;
+        while (this.solverActiveMoveIdx < idx) {
+          await this.solverStepNext();
+        }
+      });
+
+      this.stageMovesChips.appendChild(chip);
+    });
+  }
+
+  updateStageChipsHighlight() {
+    if (!this.stageMovesChips) return;
+    const chips = this.stageMovesChips.querySelectorAll('.move-chip');
+    chips.forEach((chip, idx) => {
+      chip.classList.toggle('active', idx === this.solverActiveMoveIdx);
+      chip.classList.toggle('done', idx < this.solverActiveMoveIdx);
+    });
+
+    const stage = this.solverStages[this.solverActiveStageIdx];
+    const moves = (stage && stage.moves) ? stage.moves : [];
+    if (this.stageCurrentMoveIdx) this.stageCurrentMoveIdx.textContent = this.solverActiveMoveIdx;
+    if (this.stageTotalMovesInStage) this.stageTotalMovesInStage.textContent = moves.length;
+  }
+
+  async solverStepNext() {
+    if (this.cube.isAnimating) return;
+    const stage = this.solverStages[this.solverActiveStageIdx];
+    if (!stage || !stage.moves) return;
+
+    if (this.solverActiveMoveIdx >= stage.moves.length) {
+      // Stage already completed!
+      if (this.solverActiveStageIdx < this.solverStages.length - 1) {
+        this.selectSolverStage(this.solverActiveStageIdx + 1);
+      } else {
+        this.showToast('🏆 Puzzle Solved! All stages complete.');
+        this.solverIsPlaying = false;
+        this.updateSolverPlayButton();
+      }
+      return;
+    }
+
+    const rawMove = stage.moves[this.solverActiveMoveIdx];
+    const parsed = this.engine.parseMove(rawMove);
+    if (parsed) {
+      const sp = parseInt(this.solverSpeedSelect ? this.solverSpeedSelect.value : 250, 10);
+      this.cube.setSpeed(sp);
+      await this.cube.executeMove(parsed);
+      this.recordMoveInHistory(parsed, rawMove);
+    }
+
+    this.solverActiveMoveIdx++;
+    this.updateStageChipsHighlight();
+
+    if (this.solverActiveMoveIdx >= stage.moves.length) {
+      if (this.solverActiveStageIdx < this.solverStages.length - 1) {
+        setTimeout(() => {
+          if (this.solverIsPlaying) {
+            this.selectSolverStage(this.solverActiveStageIdx + 1);
+          }
+        }, 150);
+      } else {
+        this.showToast('🏆 Puzzle Solved! All stages complete.');
+        this.solverIsPlaying = false;
+        this.updateSolverPlayButton();
+      }
+    }
+  }
+
+  async solverStepPrev() {
+    if (this.cube.isAnimating) return;
+    const stage = this.solverStages[this.solverActiveStageIdx];
+    if (!stage || !stage.moves || this.solverActiveMoveIdx <= 0) return;
+
+    this.solverActiveMoveIdx--;
+    const rawMove = stage.moves[this.solverActiveMoveIdx];
+    const invertedStr = this.invertMoveStr(rawMove);
+    const parsed = this.engine.parseMove(invertedStr);
+
+    if (parsed) {
+      const sp = parseInt(this.solverSpeedSelect ? this.solverSpeedSelect.value : 250, 10);
+      this.cube.setSpeed(sp);
+      await this.cube.executeMove(parsed);
+      this.recordMoveInHistory(parsed, invertedStr);
+    }
+
+    this.updateStageChipsHighlight();
+  }
+
+  invertMoveStr(m) {
+    if (!m) return m;
+    if (m.endsWith("2")) return m;
+    if (m.endsWith("'")) return m.slice(0, -1);
+    return m + "'";
+  }
+
+  async solverTogglePlay() {
+    if (this.solverIsPlaying) {
+      this.solverIsPlaying = false;
+      this.updateSolverPlayButton();
+      return;
+    }
+
+    this.solverIsPlaying = true;
+    this.updateSolverPlayButton();
+
+    while (this.solverIsPlaying) {
+      const stage = this.solverStages[this.solverActiveStageIdx];
+      if (!stage || !stage.moves) break;
+
+      if (this.solverActiveMoveIdx >= stage.moves.length) {
+        if (this.solverActiveStageIdx < this.solverStages.length - 1) {
+          this.selectSolverStage(this.solverActiveStageIdx + 1);
+          await new Promise(r => setTimeout(r, 200));
+        } else {
+          this.showToast('🏆 Solution Finished!');
+          this.solverIsPlaying = false;
+          this.updateSolverPlayButton();
+          break;
+        }
+      }
+
+      await this.solverStepNext();
+      const delay = parseInt(this.solverSpeedSelect ? this.solverSpeedSelect.value : 250, 10);
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    this.updateSolverPlayButton();
+  }
+
+  updateSolverPlayButton() {
+    if (!this.btnSolverPlay) return;
+    if (this.solverIsPlaying) {
+      if (this.solverPlayIcon) this.solverPlayIcon.textContent = '⏸';
+      if (this.solverPlayLabel) this.solverPlayLabel.textContent = 'Pause';
+      this.btnSolverPlay.classList.add('playing');
+    } else {
+      if (this.solverPlayIcon) this.solverPlayIcon.textContent = '▶';
+      if (this.solverPlayLabel) this.solverPlayLabel.textContent = 'Play Step';
+      this.btnSolverPlay.classList.remove('playing');
+    }
+  }
+
+  async solverResetCurrentStage() {
+    if (this.cube.isAnimating) return;
+    const stage = this.solverStages[this.solverActiveStageIdx];
+    if (!stage || !stage.moves) return;
+
+    this.solverIsPlaying = false;
+    this.updateSolverPlayButton();
+
+    while (this.solverActiveMoveIdx > 0) {
+      await this.solverStepPrev();
+    }
+  }
+
+  async solverAutoSolveAll() {
+    if (this.solverIsPlaying) return;
+    this.solverIsPlaying = true;
+    this.updateSolverPlayButton();
+
+    for (let sIdx = this.solverActiveStageIdx; sIdx < this.solverStages.length; sIdx++) {
+      if (!this.solverIsPlaying) break;
+      if (sIdx !== this.solverActiveStageIdx) {
+        this.selectSolverStage(sIdx);
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      const stage = this.solverStages[sIdx];
+      while (this.solverActiveMoveIdx < stage.moves.length && this.solverIsPlaying) {
+        await this.solverStepNext();
+        const delay = parseInt(this.solverSpeedSelect ? this.solverSpeedSelect.value : 250, 10);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+
+    this.solverIsPlaying = false;
+    this.updateSolverPlayButton();
+  }
+
+  renderSpecialPuzzleCoach(type) {
+    if (!this.coachTipsContainer) return;
+    this.coachTipsContainer.innerHTML = '';
+
+    const tips = {
+      mirror: [
+        {
+          title: 'Layer Thickness Recognition',
+          desc: 'Measure pieces by elevation: 0.65 (Thin/Yellow), 1.0 (Medium/Equatorial), 1.35 (Thick/White). Always start your cross on the thickest layer!',
+          alg: null
+        },
+        {
+          title: 'Flush Plane Verification',
+          desc: 'A piece is placed with 100% orientation precision when all its outer sides create a flat, seamless plane with adjacent pieces with 0 ridges.',
+          alg: null
+        }
+      ],
+      fisher: [
+        {
+          title: 'Center 90° Rotation Parity',
+          desc: 'Fisher centers have directional grains! Use this 4-move cycle repeated 5 times to rotate the top center 90° without disturbing anything else:',
+          alg: "R U R' U R U R' U R U R' U R U R' U R U R' U"
+        },
+        {
+          title: 'Edge-Corner Duality & False Solves',
+          desc: 'Triangular corners can be flipped upside down without looking scrambled. If you get a single flipped edge on the last layer, pop out a middle edge and reinsert it flipped!',
+          alg: null
+        }
+      ],
+      mixup: [
+        {
+          title: '45° Slice Commutator (Shape Restoration)',
+          desc: 'Execute this 45° commutator to interchange centers and edges and restore the standard cubic silhouette:',
+          alg: "M45 M45 U2 M45' M45' U2"
+        },
+        {
+          title: 'Center Orbit Routing',
+          desc: 'Route centers back to their correct faces using slice commutators:',
+          alg: "M45 U2 M45' U2"
+        }
+      ],
+      cube4: [
+        {
+          title: '4×4 OLL Parity (1 Inverted Edge)',
+          desc: 'Flips the front-top composite edge wing without disturbing centers:',
+          alg: "Rw U2 x Rw U2 Rw U2 Rw' U2 Lw U2 Rw' U2 Rw U2 Rw' U2 Rw'"
+        },
+        {
+          title: '4×4 PLL Parity (Opposite Edges Swap)',
+          desc: 'Swaps the front and back composite edge pairs on the top layer:',
+          alg: "2R2 U2 2R2 Uw2 2R2 Uw2"
+        }
+      ]
+    };
+
+    const puzzleTips = tips[type] || [
+      {
+        title: '3×3 Core Principle',
+        desc: 'Centers are fixed mechanisms! White is always opposite Yellow, Green opposite Blue, Red opposite Orange.',
+        alg: null
+      },
+      {
+        title: 'Sexy Move Trigger (R U R\' U\')',
+        desc: 'The fundamental 4-move building block used for inserting corners, orienting the yellow cross, and corner twists.',
+        alg: "R U R' U'"
+      }
+    ];
+
+    puzzleTips.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'coach-tip-card';
+
+      let algButton = '';
+      if (t.alg) {
+        algButton = `<button class="btn-parity-run" data-alg="${t.alg}" title="Run algorithm live on 3D cube">▶ Run on Cube</button>`;
+      }
+
+      card.innerHTML = `
+        <div class="coach-tip-header">
+          <span class="coach-tip-title">⚡ ${t.title}</span>
+          ${algButton}
+        </div>
+        <p class="coach-tip-body">${t.desc}</p>
+      `;
+
+      if (t.alg) {
+        const btn = card.querySelector('.btn-parity-run');
+        if (btn) {
+          btn.addEventListener('click', async () => {
+            this.showToast(`Executing: ${t.title}`);
+            const prevSpeed = this.cube.animationDuration;
+            this.cube.setSpeed(180);
+            const tokens = t.alg.trim().split(/\s+/);
+            for (const tk of tokens) {
+              const parsed = this.engine.parseMove(tk);
+              if (parsed) {
+                await this.cube.executeMove(parsed);
+                this.recordMoveInHistory(parsed, tk);
+              }
+            }
+            this.cube.setSpeed(prevSpeed);
+          });
+        }
+      }
+
+      this.coachTipsContainer.appendChild(card);
+    });
   }
 }
 

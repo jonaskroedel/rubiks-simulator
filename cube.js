@@ -391,7 +391,19 @@ class RubiksCube3D {
             (z - offset) * spacing
           );
 
-          cubie.userData = { initialX: x, initialY: y, initialZ: z };
+          cubie.userData = {
+            initialX: x,
+            initialY: y,
+            initialZ: z,
+            faceKeys: [
+              x === N - 1 ? 'R' : null,
+              x === 0     ? 'L' : null,
+              y === N - 1 ? 'U' : null,
+              y === 0     ? 'D' : null,
+              z === N - 1 ? 'F' : null,
+              z === 0     ? 'B' : null
+            ]
+          };
           this.cubeGroup.add(cubie);
           this.cubies.push(cubie);
         }
@@ -711,6 +723,130 @@ class RubiksCube3D {
 
     this.checkOrientationUpdate(true);
     return true;
+  }
+
+  getFaceletMap() {
+    const N = this.size;
+    const offset = (N - 1) / 2;
+    const faces = {
+      U: Array(N * N).fill('U'),
+      D: Array(N * N).fill('D'),
+      F: Array(N * N).fill('F'),
+      B: Array(N * N).fill('B'),
+      L: Array(N * N).fill('L'),
+      R: Array(N * N).fill('R')
+    };
+
+    const localNormals = [
+      new THREE.Vector3(1, 0, 0),  // 0: +X (R)
+      new THREE.Vector3(-1, 0, 0), // 1: -X (L)
+      new THREE.Vector3(0, 1, 0),  // 2: +Y (U)
+      new THREE.Vector3(0, -1, 0), // 3: -Y (D)
+      new THREE.Vector3(0, 0, 1),  // 4: +Z (F)
+      new THREE.Vector3(0, 0, -1)  // 5: -Z (B)
+    ];
+
+    for (const cubie of this.cubies) {
+      const faceKeys = cubie.userData ? cubie.userData.faceKeys : null;
+      if (!faceKeys) continue;
+
+      const gx = Math.round(cubie.position.x + offset);
+      const gy = Math.round(cubie.position.y + offset);
+      const gz = Math.round(cubie.position.z + offset);
+
+      for (let f = 0; f < 6; f++) {
+        const val = faceKeys[f];
+        if (!val) continue;
+
+        const worldNormal = localNormals[f].clone().applyQuaternion(cubie.quaternion);
+
+        let worldFace = null;
+        if (worldNormal.y > 0.6) worldFace = 'U';
+        else if (worldNormal.y < -0.6) worldFace = 'D';
+        else if (worldNormal.z > 0.6) worldFace = 'F';
+        else if (worldNormal.z < -0.6) worldFace = 'B';
+        else if (worldNormal.x > 0.6) worldFace = 'R';
+        else if (worldNormal.x < -0.6) worldFace = 'L';
+
+        if (!worldFace) continue;
+
+        let idx = 0;
+        if (worldFace === 'U') {
+          idx = gz * N + gx;
+        } else if (worldFace === 'D') {
+          idx = (N - 1 - gz) * N + gx;
+        } else if (worldFace === 'F') {
+          idx = (N - 1 - gy) * N + gx;
+        } else if (worldFace === 'B') {
+          idx = (N - 1 - gy) * N + (N - 1 - gx);
+        } else if (worldFace === 'R') {
+          idx = (N - 1 - gy) * N + (N - 1 - gz);
+        } else if (worldFace === 'L') {
+          idx = (N - 1 - gy) * N + gz;
+        }
+
+        if (idx >= 0 && idx < N * N) {
+          faces[worldFace][idx] = val;
+        }
+      }
+    }
+
+    return faces;
+  }
+
+  applyFaceletMap(map) {
+    if (!map) return;
+    const N = this.size;
+    const offset = (N - 1) / 2;
+    const spacing = 1.0;
+
+    this.pivotGroup.rotation.set(0, 0, 0);
+    this.isAnimating = false;
+
+    const getMat = (code) => {
+      if (this.materials[code]) return this.materials[code];
+      return this.materials.U;
+    };
+
+    for (const cubie of this.cubies) {
+      this.cubeGroup.attach(cubie);
+      const initX = cubie.userData.initialX !== undefined ? cubie.userData.initialX : Math.round(cubie.position.x + offset);
+      const initY = cubie.userData.initialY !== undefined ? cubie.userData.initialY : Math.round(cubie.position.y + offset);
+      const initZ = cubie.userData.initialZ !== undefined ? cubie.userData.initialZ : Math.round(cubie.position.z + offset);
+
+      cubie.position.set((initX - offset) * spacing, (initY - offset) * spacing, (initZ - offset) * spacing);
+      cubie.quaternion.set(0, 0, 0, 1);
+
+      const isExterior = (initX === 0 || initX === N - 1 || initY === 0 || initY === N - 1 || initZ === 0 || initZ === N - 1);
+      if (!isExterior) continue;
+
+      const idxU = initZ * N + initX;
+      const idxD = (N - 1 - initZ) * N + initX;
+      const idxF = (N - 1 - initY) * N + initX;
+      const idxB = (N - 1 - initY) * N + (N - 1 - initX);
+      const idxR = (N - 1 - initY) * N + (N - 1 - initZ);
+      const idxL = (N - 1 - initY) * N + initZ;
+
+      const valR = initX === N - 1 ? (map.R && map.R[idxR] ? map.R[idxR] : 'R') : null;
+      const valL = initX === 0     ? (map.L && map.L[idxL] ? map.L[idxL] : 'L') : null;
+      const valU = initY === N - 1 ? (map.U && map.U[idxU] ? map.U[idxU] : 'U') : null;
+      const valD = initY === 0     ? (map.D && map.D[idxD] ? map.D[idxD] : 'D') : null;
+      const valF = initZ === N - 1 ? (map.F && map.F[idxF] ? map.F[idxF] : 'F') : null;
+      const valB = initZ === 0     ? (map.B && map.B[idxB] ? map.B[idxB] : 'B') : null;
+
+      cubie.userData.faceKeys = [valR, valL, valU, valD, valF, valB];
+
+      cubie.material = [
+        valR ? getMat(valR) : this.materials.inner,
+        valL ? getMat(valL) : this.materials.inner,
+        valU ? getMat(valU) : this.materials.inner,
+        valD ? getMat(valD) : this.materials.inner,
+        valF ? getMat(valF) : this.materials.inner,
+        valB ? getMat(valB) : this.materials.inner
+      ];
+    }
+
+    this.checkOrientationUpdate(true);
   }
 
   resolveMove(move) {

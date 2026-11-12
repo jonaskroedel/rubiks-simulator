@@ -79,7 +79,42 @@ Personalize every aesthetic detail of your cube in real-time:
 
 ---
 
-### 6. Algorithm Presets & WCA Scramble Generator
+### 6. 🧩 Physical Cube Rebuilder (2D Net Facelet Painter)
+Reconstruct a real physical cube you hold in your hands directly onto the 3D canvas:
+- **Interactive 2D Unfolded Net**: Classic cross layout displaying all 6 faces (`U`, `L`, `F`, `R`, `B`, `D`) with clickable facelet tiles.
+- **Color Brush Palette**: Select active brush (White, Yellow, Green, Blue, Red, Orange) with real-time remaining and target counts (e.g. `9/9`).
+- **Live Mathematical Validation Banner**: Instant error checking ensures every face has exactly $N \times N$ facelets with zero missing or duplicate stickers.
+- **Bi-Directional Synchronization**:
+  - **📥 Read from 3D**: Inspects 3D cubie orientations and populates the 2D net from the simulator.
+  - **🚀 Apply to 3D**: Projects painted stickers onto the 3D model and saves an initial checkpoint in chess history.
+  - **🧙‍♂️ Apply & Solve Guide**: Automatically projects the real cube state into 3D and launches the Step-by-Step Solver Guide.
+
+---
+
+### 7. 🧙‍♂️ Interactive Step-by-Step Solution Guide
+An educational solver engine that walks you through solving the cube move-by-move:
+- **3×3 Layer-by-Layer (CFOP) Solver**:
+  1. *The White Cross* (Foundation on bottom face D)
+  2. *First Layer Corners* (White face & lateral belt)
+  3. *Second Layer Edges* (F2L equatorial belt)
+  4. *Top Yellow Cross* (OLL Cross)
+  5. *Align Cross Edges* (PLL Edges via Sune algorithm)
+  6. *Position Top Corners* (PLL Corners via Niklas algorithm)
+  7. *Orient Final Corners* (Final in-place twist to complete the solve!)
+- **Interactive Stepper Controls**:
+  - `⏮ Prev Move` / `⏭ Next Move`: Step back and forth; turns the 3D cube in real time so you can follow along physically.
+  - `▶ Play Step` / `⏸ Pause`: Plays the current stage at adjustable speeds (0.5× Slow, 1× Normal, 2.5× Fast).
+  - `⚡ Auto-Solve All`: Runs through all remaining stages sequentially to solve the entire cube.
+  - Clickable move chips with active glowing highlights and progress badges.
+- **Specialized Strategy & Parity Center for Complex Puzzles**:
+  - **🪞 Mirror Cube**: Geometric elevation recognition (Thin 0.65, Medium 1.0, Thick 1.35) and flush planar alignment cues.
+  - **🐟 Fisher Cube**: Edge-corner duality recognition, 1-click **Center 90° Rotation** algorithm `(R U R' U) × 5`, and 1-edge-flip parity resolution.
+  - **🔀 WitEden & Oskar Mixup 3×3**: 3-Phase strategy (Phase 1 Shape Restoration with 45° commutators `M45 M45 U2 M45' M45' U2`, Phase 2 Center Routing, Phase 3 3×3 solve and parity resolution).
+  - **4×4 Revenge**: Reduction Method stages with 1-click execution for **OLL Parity** and **PLL Parity**.
+
+---
+
+### 8. Algorithm Presets & WCA Scramble Generator
 - **Algorithm Library**: Pre-loaded with common triggers, permutations, and parity sequences:
   - *Sexy Move* (`R U R' U'`), *Sune*, *Anti-Sune*
   - *T-Perm*, *Y-Perm*, *J-Perm*, *H-Perm*, *Z-Perm*
@@ -135,11 +170,12 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 rubiks-simulator/
-├── index.html       # Main layout, puzzle selector, designer studio modal & HUD
-├── style.css        # Glassmorphic dark UI, palette picker, and chess history table
+├── index.html       # Main layout, puzzle selector, rebuilder & solver modals, HUD
+├── style.css        # Glassmorphic dark UI, 2D unfolded net, and solver stepper styles
 ├── cube.js          # Three.js 3D engine: standard, Fisher, Mirror, and Mixup geometry
 ├── notation.js      # WCA notation parser, 45° slice support, and scrambler
-├── app.js           # Application controller, chess table, bookmarks, and designer sync
+├── solver.js        # LBL/CFOP solver, Ortega 2x2, VirtualCube model & guide database
+├── app.js           # Application controller, Rebuilder & Solver guide controllers
 ├── server.js        # Zero-dependency local HTTP static server
 ├── package.json     # Project metadata and start scripts
 ├── .gitignore       # Git ignore rules
