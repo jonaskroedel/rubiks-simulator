@@ -9,9 +9,21 @@ class NotationEngine {
     this.puzzleType = puzzleType;
   }
 
-  setSize(size, puzzleType = 'cube3') {
+  setSize(size, puzzleType = 'cube3', dimensions = null) {
     this.size = size;
     this.puzzleType = puzzleType;
+    if (dimensions) {
+      this.dimensions = dimensions;
+    } else {
+      const reg = (typeof puzzleRegistry !== 'undefined') ? puzzleRegistry.get(puzzleType) : null;
+      if (reg && reg.dimensions) {
+        this.dimensions = reg.dimensions;
+      } else if (puzzleType === 'cube3x3x4') {
+        this.dimensions = [3, 4, 3];
+      } else {
+        this.dimensions = [size, size, size];
+      }
+    }
   }
 
   setPuzzleType(puzzleType) {
@@ -198,11 +210,15 @@ class NotationEngine {
   generateScramble() {
     const N = this.size;
     const type = this.puzzleType;
+    const reg = (typeof puzzleRegistry !== 'undefined') ? puzzleRegistry.get(type) : null;
 
     if (type === 'mixup') {
       return this.generateMixupScramble(18);
     } else if (type === 'fisher' || type === 'mirror') {
       return this.generate3x3Scramble(20);
+    } else if (type === 'cube3x3x4' || (reg && reg.isCuboid)) {
+      const dims = this.dimensions || (reg ? reg.dimensions : [3, 4, 3]);
+      return this.generateCuboidScramble(dims, 20);
     } else if (N === 2) {
       return this.generate2x2Scramble(10);
     } else if (N === 4) {
@@ -210,6 +226,49 @@ class NotationEngine {
     } else {
       return this.generate3x3Scramble(21);
     }
+  }
+
+  generateCuboidScramble(dimensions = [3, 4, 3], length = 20) {
+    const [Nx, Ny, Nz] = dimensions;
+    const moves = [];
+    const squareFaces = [];
+    const nonSquareFaces = [];
+
+    // Axis Y: U / D
+    if (Nx === Nz) squareFaces.push('U', 'D');
+    else nonSquareFaces.push('U', 'D');
+
+    // Axis X: R / L
+    if (Ny === Nz) squareFaces.push('R', 'L');
+    else nonSquareFaces.push('R', 'L');
+
+    // Axis Z: F / B
+    if (Nx === Ny) squareFaces.push('F', 'B');
+    else nonSquareFaces.push('F', 'B');
+
+    const squareMods = ['', "'", '2'];
+    let lastFace = null;
+
+    for (let i = 0; i < length; i++) {
+      const useSquare = (squareFaces.length > 0) && (Math.random() < 0.55 || nonSquareFaces.length === 0);
+      let face, move;
+
+      if (useSquare) {
+        const available = squareFaces.filter(f => f !== lastFace);
+        face = available[Math.floor(Math.random() * available.length)];
+        const mod = squareMods[Math.floor(Math.random() * squareMods.length)];
+        move = `${face}${mod}`;
+      } else {
+        const available = nonSquareFaces.filter(f => f !== lastFace);
+        face = available[Math.floor(Math.random() * available.length)];
+        move = `${face}2`;
+      }
+
+      moves.push(move);
+      lastFace = face;
+    }
+
+    return moves.join(' ');
   }
 
   generateMixupScramble(length = 18) {

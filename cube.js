@@ -1068,6 +1068,22 @@ class RubiksCube3D {
     const dim = this.dimensions ? this.dimensions[axis] : this.size;
     const sign = targetFace.sign;
     const isHigh = (sign === 1);
+
+    // On non-square faces of a cuboid (e.g. 3x4 faces on a 3x3x4), 90° turns are geometrically illegal.
+    // Automatically enforce 180° turns (half-turns) to preserve cuboid integrity.
+    if (this.dimensions) {
+      let otherAxis1, otherAxis2;
+      if (axis === 'x') { otherAxis1 = 'y'; otherAxis2 = 'z'; }
+      else if (axis === 'y') { otherAxis1 = 'x'; otherAxis2 = 'z'; }
+      else { otherAxis1 = 'x'; otherAxis2 = 'y'; }
+
+      const d1 = this.dimensions[otherAxis1];
+      const d2 = this.dimensions[otherAxis2];
+      if (d1 !== d2) {
+        mult = (mult % 2 === 0) ? mult : 2;
+      }
+    }
+
     const angle = (-sign * (Math.PI / 2)) * mult;
 
     let layers = [];
@@ -1193,8 +1209,10 @@ class RubiksCube3D {
   finalizeMove(selectedCubies, axis) {
     this.pivotGroup.updateMatrixWorld(true);
 
-    const N = this.size;
-    const offset = (N - 1) / 2;
+    const dims = this.dimensions || { x: this.size, y: this.size, z: this.size };
+    const offX = (dims.x - 1) / 2;
+    const offY = (dims.y - 1) / 2;
+    const offZ = (dims.z - 1) / 2;
 
     selectedCubies.forEach(cubie => {
       this.cubeGroup.attach(cubie);
@@ -1216,9 +1234,9 @@ class RubiksCube3D {
         cubie.position.y = snapMirrorCoord(cubie.position.y);
         cubie.position.z = snapMirrorCoord(cubie.position.z);
       } else {
-        cubie.position.x = Math.round(cubie.position.x + offset) - offset;
-        cubie.position.y = Math.round(cubie.position.y + offset) - offset;
-        cubie.position.z = Math.round(cubie.position.z + offset) - offset;
+        cubie.position.x = Math.round(cubie.position.x + offX) - offX;
+        cubie.position.y = Math.round(cubie.position.y + offY) - offY;
+        cubie.position.z = Math.round(cubie.position.z + offZ) - offZ;
       }
 
       this.snapOrientation(cubie);

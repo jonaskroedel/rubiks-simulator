@@ -1811,8 +1811,10 @@ class CubeApp {
 
     this.currentSize = newSize;
     this.currentType = newType;
+    this.rebuilderNet = null;
 
-    this.engine.setSize(newSize, newType);
+    const dims = (reg && reg.dimensions) ? reg.dimensions : (newType === 'cube3x3x4' ? [3, 4, 3] : [newSize, newSize, newSize]);
+    this.engine.setSize(newSize, newType, dims);
     this.cube.setSize(newSize, newType);
 
     this.initHistory();
@@ -2544,6 +2546,19 @@ class CubeApp {
     }, 2400);
   }
 
+  getCubeDimensions() {
+    if (this.cube && this.cube.dimensions) {
+      const d = this.cube.dimensions;
+      if (Array.isArray(d)) return [d[0] || this.currentSize, d[1] || this.currentSize, d[2] || this.currentSize];
+      return [d.x || this.currentSize, d.y || this.currentSize, d.z || this.currentSize];
+    }
+    const reg = (typeof puzzleRegistry !== 'undefined') ? puzzleRegistry.get(this.currentType) : null;
+    if (reg && reg.dimensions) {
+      return [reg.dimensions[0], reg.dimensions[1], reg.dimensions[2]];
+    }
+    return [this.currentSize, this.currentSize, this.currentSize];
+  }
+
   // =========================================================================
   // Physical Cube Rebuilder (3D Painter & 2D Net) Logic
   // =========================================================================
@@ -2563,8 +2578,7 @@ class CubeApp {
       this.rebuilderPuzzleTypePill.textContent = (reg && reg.name) ? reg.name : (typeNames[this.currentType] || `${this.currentSize}×${this.currentSize}`);
     }
 
-    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
-    const [Nx, Ny, Nz] = dims;
+    const [Nx, Ny, Nz] = this.getCubeDimensions();
     const expected = {
       U: Nx * Nz, D: Nx * Nz,
       F: Nx * Ny, B: Nx * Ny,
@@ -2649,8 +2663,7 @@ class CubeApp {
   renderRebuilderNet() {
     if (!this.cubeUnfoldedNet) return;
     this.cubeUnfoldedNet.innerHTML = '';
-    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
-    const [Nx, Ny, Nz] = dims;
+    const [Nx, Ny, Nz] = this.getCubeDimensions();
 
     const th = this.cube ? this.cube.theme : {
       U: '#F7F8FA', D: '#FFD500', F: '#009E48', B: '#0046AD', R: '#C41230', L: '#FF5500'
@@ -2723,8 +2736,7 @@ class CubeApp {
 
   validateRebuilderNet() {
     if (!this.rebuilderNet) return false;
-    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
-    const [Nx, Ny, Nz] = dims;
+    const [Nx, Ny, Nz] = this.getCubeDimensions();
 
     const expectedPerFace = {
       U: Nx * Nz,
@@ -2796,8 +2808,7 @@ class CubeApp {
   }
 
   rebuilderResetSolved() {
-    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
-    const [Nx, Ny, Nz] = dims;
+    const [Nx, Ny, Nz] = this.getCubeDimensions();
     this.rebuilderNet = {
       U: Array(Nx * Nz).fill('U'),
       D: Array(Nx * Nz).fill('D'),
@@ -2815,8 +2826,7 @@ class CubeApp {
   }
 
   rebuilderClear() {
-    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
-    const [Nx, Ny, Nz] = dims;
+    const [Nx, Ny, Nz] = this.getCubeDimensions();
     this.rebuilderNet = {
       U: Array(Nx * Nz).fill('U'),
       D: Array(Nx * Nz).fill('U'),
