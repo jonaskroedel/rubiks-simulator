@@ -2730,3 +2730,214 @@ body {
   background: #8b5cf6;
   color: #fff;
 }
+
+/* ==========================================================================
+   Custom Cube Builder Studio Styles
+   ========================================================================== */
+
+.size-btn.highlight-builder {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-weight: 600;
+}
+
+.size-btn.highlight-builder:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(5, 150, 105, 0.45) 100%);
+  border-color: #34d399;
+  color: #fff;
+}
+
+.custom-cube-card {
+  max-width: 620px;
+  width: 95vw;
+}
+
+.custom-cube-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-cube-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.custom-cube-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.custom-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preset-cuboid-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-cuboid-preset {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-cuboid-preset:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-cuboid-preset.active {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #34d399;
+  font-weight: 700;
+}
+
+.dim-inputs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.dim-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.dim-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dim-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  color: #34d399;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.dim-input:focus {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.dim-mult {
+  font-size: 18px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.custom-row-inputs {
+  display: flex;
+  gap: 12px;
+}
+
+.custom-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.custom-input-group.flex-1 { flex: 1; }
+.custom-input-group.flex-2 { flex: 2; }
+
+.custom-text-input {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.custom-text-input:focus {
+  border-color: #10b981;
+}
+
+.custom-text-input[readonly] {
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.custom-code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-copy-code {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.btn-copy-code:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.custom-code-preview {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #58a6ff;
+  overflow-x: auto;
+}
+
+.custom-cube-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+}

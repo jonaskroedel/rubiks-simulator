@@ -342,12 +342,23 @@ class RubiksCube3D {
     }
     this.cubies = [];
 
-    if (type === 'mirror') {
+    const regDef = (typeof puzzleRegistry !== 'undefined') ? puzzleRegistry.get(type) : null;
+    if (regDef && regDef.dimensions) {
+      this.dimensions = { x: regDef.dimensions[0], y: regDef.dimensions[1], z: regDef.dimensions[2] };
+    } else {
+      this.dimensions = { x: size, y: size, z: size };
+    }
+
+    if (type === 'mirror' || (regDef && regDef.shapeModType === 'mirror')) {
       this.buildMirrorCube();
-    } else if (type === 'fisher') {
+    } else if (type === 'fisher' || (regDef && regDef.shapeModType === 'fisher')) {
       this.buildFisherCube();
-    } else if (type === 'mixup') {
+    } else if (type === 'mixup' || (regDef && regDef.shapeModType === 'mixup')) {
       this.buildMixupCube();
+    } else if (regDef && (regDef.isCuboid || (regDef.dimensions && (regDef.dimensions[0] !== regDef.dimensions[1] || regDef.dimensions[1] !== regDef.dimensions[2])))) {
+      this.buildCuboid(regDef.dimensions[0], regDef.dimensions[1], regDef.dimensions[2]);
+    } else if (type === 'cube3x3x4') {
+      this.buildCuboid(3, 4, 3);
     } else {
       this.buildStandardCube(size);
     }
@@ -357,10 +368,72 @@ class RubiksCube3D {
   }
 
   /**
+   * Builds an articulated N_x × N_y × N_z Cuboid (e.g. 3×3×4, 2×2×3, 3×3×5, etc.)
+   */
+  buildCuboid(Nx = 3, Ny = 4, Nz = 3) {
+    this.dimensions = { x: Nx, y: Ny, z: Nz };
+    this.size = Math.max(Nx, Ny, Nz);
+    const cubieSize = 0.96;
+    const spacing = 1.0;
+    const offsetX = (Nx - 1) / 2;
+    const offsetY = (Ny - 1) / 2;
+    const offsetZ = (Nz - 1) / 2;
+    const cubieGeo = new THREE.BoxGeometry(cubieSize, cubieSize, cubieSize);
+
+    for (let x = 0; x < Nx; x++) {
+      for (let y = 0; y < Ny; y++) {
+        for (let z = 0; z < Nz; z++) {
+          const isExterior = (x === 0 || x === Nx - 1 || y === 0 || y === Ny - 1 || z === 0 || z === Nz - 1);
+          if (!isExterior) continue;
+
+          const mats = [
+            x === Nx - 1 ? this.materials.R : this.materials.inner,
+            x === 0      ? this.materials.L : this.materials.inner,
+            y === Ny - 1 ? this.materials.U : this.materials.inner,
+            y === 0      ? this.materials.D : this.materials.inner,
+            z === Nz - 1 ? this.materials.F : this.materials.inner,
+            z === 0      ? this.materials.B : this.materials.inner
+          ];
+
+          const cubie = new THREE.Mesh(cubieGeo, mats);
+          cubie.castShadow = true;
+          cubie.receiveShadow = true;
+
+          cubie.position.set(
+            (x - offsetX) * spacing,
+            (y - offsetY) * spacing,
+            (z - offsetZ) * spacing
+          );
+
+          cubie.userData = {
+            initialX: x,
+            initialY: y,
+            initialZ: z,
+            isCuboid: true,
+            Nx, Ny, Nz,
+            faceKeys: [
+              x === Nx - 1 ? 'R' : null,
+              x === 0      ? 'L' : null,
+              y === Ny - 1 ? 'U' : null,
+              y === 0      ? 'D' : null,
+              z === Nz - 1 ? 'F' : null,
+              z === 0      ? 'B' : null
+            ]
+          };
+
+          this.cubeGroup.add(cubie);
+          this.cubies.push(cubie);
+        }
+      }
+    }
+  }
+
+  /**
    * Builds Standard 2x2, 3x3, or 4x4 Cube
    */
   buildStandardCube(size) {
     const N = size;
+    this.dimensions = { x: N, y: N, z: N };
     const cubieSize = 0.96;
     const spacing = 1.0;
     const offset = (N - 1) / 2;
@@ -418,6 +491,7 @@ class RubiksCube3D {
    */
   buildMirrorCube() {
     this.size = 3;
+    this.dimensions = { x: 3, y: 3, z: 3 };
     const Tx = [0.65, 1.0, 1.35];
     const Ty = [0.75, 1.0, 1.25];
     const Tz = [0.85, 1.0, 1.15];
@@ -445,7 +519,20 @@ class RubiksCube3D {
           cubie.receiveShadow = true;
 
           cubie.position.set(Cx[x], Cy[y], Cz[z]);
-          cubie.userData = { initialX: x, initialY: y, initialZ: z, isMirror: true };
+          cubie.userData = { 
+            initialX: x, 
+            initialY: y, 
+            initialZ: z, 
+            isMirror: true,
+            faceKeys: [
+              x === 2 ? 'R' : null,
+              x === 0 ? 'L' : null,
+              y === 2 ? 'U' : null,
+              y === 0 ? 'D' : null,
+              z === 2 ? 'F' : null,
+              z === 0 ? 'B' : null
+            ]
+          };
 
           this.cubeGroup.add(cubie);
           this.cubies.push(cubie);
@@ -621,7 +708,20 @@ class RubiksCube3D {
           }
 
           group.position.set(x * 1.0, y * 1.0, z * 1.0);
-          group.userData = { initialX: x + 1, initialY: y + 1, initialZ: z + 1, isFisher: true };
+          group.userData = { 
+            initialX: x + 1, 
+            initialY: y + 1, 
+            initialZ: z + 1, 
+            isFisher: true,
+            faceKeys: [
+              x === 1  ? 'R' : null,
+              x === -1 ? 'L' : null,
+              y === 1  ? 'U' : null,
+              y === -1 ? 'D' : null,
+              z === 1  ? 'F' : null,
+              z === -1 ? 'B' : null
+            ]
+          };
 
           this.cubeGroup.add(group);
           this.cubies.push(group);
@@ -637,6 +737,7 @@ class RubiksCube3D {
    */
   buildMixupCube() {
     this.size = 3;
+    this.dimensions = { x: 3, y: 3, z: 3 };
     const S = 3.0 / (2 + Math.SQRT2); // ~0.8787 outer layer thickness
     const M = S * Math.SQRT2;         // ~1.2426 middle layer thickness (diagonal of S x S edge)
     const T = [S, M, S];
@@ -673,7 +774,20 @@ class RubiksCube3D {
           cubie.receiveShadow = true;
 
           cubie.position.set(C[x], C[y], C[z]);
-          cubie.userData = { initialX: x, initialY: y, initialZ: z, isMixup: true };
+          cubie.userData = { 
+            initialX: x, 
+            initialY: y, 
+            initialZ: z, 
+            isMixup: true,
+            faceKeys: [
+              x === 2 ? 'R' : null,
+              x === 0 ? 'L' : null,
+              y === 2 ? 'U' : null,
+              y === 0 ? 'D' : null,
+              z === 2 ? 'F' : null,
+              z === 0 ? 'B' : null
+            ]
+          };
 
           this.cubeGroup.add(cubie);
           this.cubies.push(cubie);
@@ -726,15 +840,17 @@ class RubiksCube3D {
   }
 
   getFaceletMap() {
-    const N = this.size;
-    const offset = (N - 1) / 2;
+    const Nx = this.dimensions ? this.dimensions.x : this.size;
+    const Ny = this.dimensions ? this.dimensions.y : this.size;
+    const Nz = this.dimensions ? this.dimensions.z : this.size;
+
     const faces = {
-      U: Array(N * N).fill('U'),
-      D: Array(N * N).fill('D'),
-      F: Array(N * N).fill('F'),
-      B: Array(N * N).fill('B'),
-      L: Array(N * N).fill('L'),
-      R: Array(N * N).fill('R')
+      U: Array(Nx * Nz).fill('U'),
+      D: Array(Nx * Nz).fill('D'),
+      F: Array(Nx * Ny).fill('F'),
+      B: Array(Nx * Ny).fill('B'),
+      L: Array(Nz * Ny).fill('L'),
+      R: Array(Nz * Ny).fill('R')
     };
 
     const localNormals = [
@@ -746,13 +862,34 @@ class RubiksCube3D {
       new THREE.Vector3(0, 0, -1)  // 5: -Z (B)
     ];
 
+    const getGridCoord = (val, axis) => {
+      if (this.puzzleType === 'mirror') {
+        if (val < -0.45) return 0;
+        if (val > 0.45) return 2;
+        return 1;
+      }
+      if (this.puzzleType === 'mixup') {
+        if (val < -0.5) return 0;
+        if (val > 0.5) return 2;
+        return 1;
+      }
+      if (this.puzzleType === 'fisher') {
+        if (val < -0.45) return 0;
+        if (val > 0.45) return 2;
+        return 1;
+      }
+      const dim = axis === 'x' ? Nx : (axis === 'y' ? Ny : Nz);
+      const off = (dim - 1) / 2;
+      return Math.max(0, Math.min(dim - 1, Math.round(val + off)));
+    };
+
     for (const cubie of this.cubies) {
       const faceKeys = cubie.userData ? cubie.userData.faceKeys : null;
       if (!faceKeys) continue;
 
-      const gx = Math.round(cubie.position.x + offset);
-      const gy = Math.round(cubie.position.y + offset);
-      const gz = Math.round(cubie.position.z + offset);
+      const gx = getGridCoord(cubie.position.x, 'x');
+      const gy = getGridCoord(cubie.position.y, 'y');
+      const gz = getGridCoord(cubie.position.z, 'z');
 
       for (let f = 0; f < 6; f++) {
         const val = faceKeys[f];
@@ -772,20 +909,20 @@ class RubiksCube3D {
 
         let idx = 0;
         if (worldFace === 'U') {
-          idx = gz * N + gx;
+          idx = gz * Nx + gx;
         } else if (worldFace === 'D') {
-          idx = (N - 1 - gz) * N + gx;
+          idx = (Nz - 1 - gz) * Nx + gx;
         } else if (worldFace === 'F') {
-          idx = (N - 1 - gy) * N + gx;
+          idx = (Ny - 1 - gy) * Nx + gx;
         } else if (worldFace === 'B') {
-          idx = (N - 1 - gy) * N + (N - 1 - gx);
+          idx = (Ny - 1 - gy) * Nx + (Nx - 1 - gx);
         } else if (worldFace === 'R') {
-          idx = (N - 1 - gy) * N + (N - 1 - gz);
+          idx = (Ny - 1 - gy) * Nz + (Nz - 1 - gz);
         } else if (worldFace === 'L') {
-          idx = (N - 1 - gy) * N + gz;
+          idx = (Ny - 1 - gy) * Nz + gz;
         }
 
-        if (idx >= 0 && idx < N * N) {
+        if (faces[worldFace] && idx >= 0 && idx < faces[worldFace].length) {
           faces[worldFace][idx] = val;
         }
       }
@@ -796,8 +933,12 @@ class RubiksCube3D {
 
   applyFaceletMap(map) {
     if (!map) return;
-    const N = this.size;
-    const offset = (N - 1) / 2;
+    const Nx = this.dimensions ? this.dimensions.x : this.size;
+    const Ny = this.dimensions ? this.dimensions.y : this.size;
+    const Nz = this.dimensions ? this.dimensions.z : this.size;
+    const offsetX = (Nx - 1) / 2;
+    const offsetY = (Ny - 1) / 2;
+    const offsetZ = (Nz - 1) / 2;
     const spacing = 1.0;
 
     this.pivotGroup.rotation.set(0, 0, 0);
@@ -808,42 +949,63 @@ class RubiksCube3D {
       return this.materials.U;
     };
 
+    const Tx = [0.65, 1.0, 1.35];
+    const Ty = [0.75, 1.0, 1.25];
+    const Tz = [0.85, 1.0, 1.15];
+    const Cx = [-0.5 - Tx[0] / 2, 0, 0.5 + Tx[2] / 2];
+    const Cy = [-0.5 - Ty[0] / 2, 0, 0.5 + Ty[2] / 2];
+    const Cz = [-0.5 - Tz[0] / 2, 0, 0.5 + Tz[2] / 2];
+
+    const S = 3.0 / (2 + Math.SQRT2);
+    const M = S * Math.SQRT2;
+    const Cmix = [-M / 2 - S / 2, 0, M / 2 + S / 2];
+
     for (const cubie of this.cubies) {
       this.cubeGroup.attach(cubie);
-      const initX = cubie.userData.initialX !== undefined ? cubie.userData.initialX : Math.round(cubie.position.x + offset);
-      const initY = cubie.userData.initialY !== undefined ? cubie.userData.initialY : Math.round(cubie.position.y + offset);
-      const initZ = cubie.userData.initialZ !== undefined ? cubie.userData.initialZ : Math.round(cubie.position.z + offset);
+      const initX = cubie.userData.initialX !== undefined ? cubie.userData.initialX : 1;
+      const initY = cubie.userData.initialY !== undefined ? cubie.userData.initialY : 1;
+      const initZ = cubie.userData.initialZ !== undefined ? cubie.userData.initialZ : 1;
 
-      cubie.position.set((initX - offset) * spacing, (initY - offset) * spacing, (initZ - offset) * spacing);
+      if (this.puzzleType === 'mirror') {
+        cubie.position.set(Cx[initX], Cy[initY], Cz[initZ]);
+      } else if (this.puzzleType === 'mixup') {
+        cubie.position.set(Cmix[initX], Cmix[initY], Cmix[initZ]);
+      } else if (this.puzzleType === 'fisher') {
+        cubie.position.set((initX - 1) * 1.0, (initY - 1) * 1.0, (initZ - 1) * 1.0);
+      } else {
+        cubie.position.set((initX - offsetX) * spacing, (initY - offsetY) * spacing, (initZ - offsetZ) * spacing);
+      }
       cubie.quaternion.set(0, 0, 0, 1);
 
-      const isExterior = (initX === 0 || initX === N - 1 || initY === 0 || initY === N - 1 || initZ === 0 || initZ === N - 1);
+      const isExterior = (initX === 0 || initX === Nx - 1 || initY === 0 || initY === Ny - 1 || initZ === 0 || initZ === Nz - 1);
       if (!isExterior) continue;
 
-      const idxU = initZ * N + initX;
-      const idxD = (N - 1 - initZ) * N + initX;
-      const idxF = (N - 1 - initY) * N + initX;
-      const idxB = (N - 1 - initY) * N + (N - 1 - initX);
-      const idxR = (N - 1 - initY) * N + (N - 1 - initZ);
-      const idxL = (N - 1 - initY) * N + initZ;
+      const idxU = initZ * Nx + initX;
+      const idxD = (Nz - 1 - initZ) * Nx + initX;
+      const idxF = (Ny - 1 - initY) * Nx + initX;
+      const idxB = (Ny - 1 - initY) * Nx + (Nx - 1 - initX);
+      const idxR = (Ny - 1 - initY) * Nz + (Nz - 1 - initZ);
+      const idxL = (Ny - 1 - initY) * Nz + initZ;
 
-      const valR = initX === N - 1 ? (map.R && map.R[idxR] ? map.R[idxR] : 'R') : null;
-      const valL = initX === 0     ? (map.L && map.L[idxL] ? map.L[idxL] : 'L') : null;
-      const valU = initY === N - 1 ? (map.U && map.U[idxU] ? map.U[idxU] : 'U') : null;
-      const valD = initY === 0     ? (map.D && map.D[idxD] ? map.D[idxD] : 'D') : null;
-      const valF = initZ === N - 1 ? (map.F && map.F[idxF] ? map.F[idxF] : 'F') : null;
-      const valB = initZ === 0     ? (map.B && map.B[idxB] ? map.B[idxB] : 'B') : null;
+      const valR = initX === Nx - 1 ? (map.R && map.R[idxR] ? map.R[idxR] : 'R') : null;
+      const valL = initX === 0      ? (map.L && map.L[idxL] ? map.L[idxL] : 'L') : null;
+      const valU = initY === Ny - 1 ? (map.U && map.U[idxU] ? map.U[idxU] : 'U') : null;
+      const valD = initY === 0      ? (map.D && map.D[idxD] ? map.D[idxD] : 'D') : null;
+      const valF = initZ === Nz - 1 ? (map.F && map.F[idxF] ? map.F[idxF] : 'F') : null;
+      const valB = initZ === 0      ? (map.B && map.B[idxB] ? map.B[idxB] : 'B') : null;
 
       cubie.userData.faceKeys = [valR, valL, valU, valD, valF, valB];
 
-      cubie.material = [
-        valR ? getMat(valR) : this.materials.inner,
-        valL ? getMat(valL) : this.materials.inner,
-        valU ? getMat(valU) : this.materials.inner,
-        valD ? getMat(valD) : this.materials.inner,
-        valF ? getMat(valF) : this.materials.inner,
-        valB ? getMat(valB) : this.materials.inner
-      ];
+      if (Array.isArray(cubie.material)) {
+        cubie.material = [
+          valR ? getMat(valR) : this.materials.inner,
+          valL ? getMat(valL) : this.materials.inner,
+          valU ? getMat(valU) : this.materials.inner,
+          valD ? getMat(valD) : this.materials.inner,
+          valF ? getMat(valF) : this.materials.inner,
+          valB ? getMat(valB) : this.materials.inner
+        ];
+      }
     }
 
     this.checkOrientationUpdate(true);
@@ -851,7 +1013,6 @@ class RubiksCube3D {
 
   resolveMove(move) {
     const orientation = this.getCurrentOrientation();
-    const N = this.size;
     const mult = move.multiplier || 1;
 
     // Whole Cube Rotations (x, y, z)
@@ -862,10 +1023,12 @@ class RubiksCube3D {
       else if (base === 'y') targetFace = orientation.U;
       else if (base === 'z') targetFace = orientation.F;
 
-      const layers = Array.from({ length: N }, (_, idx) => idx);
+      const axis = targetFace.axis;
+      const dim = this.dimensions ? this.dimensions[axis] : this.size;
+      const layers = Array.from({ length: dim }, (_, idx) => idx);
       const angle = (-targetFace.sign * (Math.PI / 2)) * mult;
       return { 
-        axis: targetFace.axis, 
+        axis, 
         layers, 
         angle, 
         targetColor: targetFace.color, 
@@ -881,10 +1044,12 @@ class RubiksCube3D {
       else if (base === 'E') targetFace = orientation.D;
       else if (base === 'S') targetFace = orientation.F;
 
-      const layers = (N === 3) ? [1] : [1, 2];
+      const axis = targetFace.axis;
+      const dim = this.dimensions ? this.dimensions[axis] : this.size;
+      const layers = (dim === 3) ? [1] : (dim > 3 ? Array.from({ length: dim - 2 }, (_, i) => i + 1) : [0]);
       const angle = (-targetFace.sign * (Math.PI / 2)) * mult;
       return { 
-        axis: targetFace.axis, 
+        axis, 
         layers, 
         angle, 
         targetColor: targetFace.color, 
@@ -900,6 +1065,7 @@ class RubiksCube3D {
     }
 
     const axis = targetFace.axis;
+    const dim = this.dimensions ? this.dimensions[axis] : this.size;
     const sign = targetFace.sign;
     const isHigh = (sign === 1);
     const angle = (-sign * (Math.PI / 2)) * mult;
@@ -909,20 +1075,20 @@ class RubiksCube3D {
       if (move.isWide) {
         const count = move.layerPrefix;
         for (let l = 0; l < count; l++) {
-          layers.push(isHigh ? (N - 1 - l) : l);
+          layers.push(isHigh ? (dim - 1 - l) : l);
         }
       } else {
         const idx = move.layerPrefix - 1;
-        layers = [isHigh ? (N - 1 - idx) : idx];
+        layers = [isHigh ? (dim - 1 - idx) : idx];
       }
     } else if (move.isWide) {
-      if (N === 2) {
+      if (dim <= 2) {
         layers = [0, 1];
       } else {
-        layers = isHigh ? [N - 2, N - 1] : [0, 1];
+        layers = isHigh ? [dim - 2, dim - 1] : [0, 1];
       }
     } else {
-      layers = [isHigh ? (N - 1) : 0];
+      layers = [isHigh ? (dim - 1) : 0];
     }
 
     layers.sort((a, b) => a - b);
@@ -942,8 +1108,8 @@ class RubiksCube3D {
 
     const resolved = this.resolveMove(rawMove);
     const { axis, layers, angle } = resolved;
-    const N = this.size;
-    const offset = (N - 1) / 2;
+    const dim = this.dimensions ? this.dimensions[axis] : this.size;
+    const offset = (dim - 1) / 2;
 
     const selectedCubies = this.cubies.filter(cubie => {
       const coord = cubie.position[axis];
@@ -961,7 +1127,7 @@ class RubiksCube3D {
         else layerIdx = -1; // tilted across cut
       } else {
         const idx = Math.round(coord + offset);
-        if (Math.abs((idx - offset) - coord) < 0.35) {
+        if (Math.abs((idx - offset) - coord) < 0.4) {
           layerIdx = idx;
         }
       }

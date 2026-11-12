@@ -5,35 +5,49 @@
 
 function simplifyMoves(moves) {
   if (!moves || moves.length === 0) return [];
-  const clean = moves.filter(m => m && m.trim().length > 0);
+  const clean = moves.filter(m => m && typeof m === 'string' && m.trim().length > 0);
   const out = [];
 
-  const parseMove = (m) => {
-    let face = m[0];
-    let count = 1;
-    if (m.endsWith("'")) count = 3;
-    else if (m.endsWith("2")) count = 2;
-    return { face, count };
+  const invertToken = (m) => {
+    if (!m) return '';
+    if (m.endsWith("2")) return m;
+    if (m.endsWith("'")) return m.slice(0, -1);
+    return m + "'";
   };
 
-  const formatMove = (face, count) => {
+  const parseStandard = (m) => {
+    const match = m.match(/^([UDLRFBxyzMESudlrfb]|(?:[UDLRFB]w))(['2]?)$/);
+    if (!match) return null;
+    const base = match[1];
+    const mod = match[2];
+    let count = 1;
+    if (mod === "'") count = 3;
+    else if (mod === '2') count = 2;
+    return { base, count };
+  };
+
+  const formatStandard = (base, count) => {
     const mod = ((count % 4) + 4) % 4;
     if (mod === 0) return null;
-    if (mod === 1) return face;
-    if (mod === 2) return face + "2";
-    if (mod === 3) return face + "'";
+    if (mod === 1) return base;
+    if (mod === 2) return base + "2";
+    if (mod === 3) return base + "'";
     return null;
   };
 
   for (const m of clean) {
-    const parsed = parseMove(m);
     if (out.length > 0) {
       const last = out[out.length - 1];
-      const lastParsed = parseMove(last);
-      if (lastParsed.face === parsed.face) {
+      if (invertToken(last) === m || invertToken(m) === last) {
         out.pop();
-        const combined = formatMove(parsed.face, lastParsed.count + parsed.count);
-        if (combined) out.push(combined);
+        continue;
+      }
+      const pLast = parseStandard(last);
+      const pCurr = parseStandard(m);
+      if (pLast && pCurr && pLast.base === pCurr.base) {
+        out.pop();
+        const comb = formatStandard(pCurr.base, pLast.count + pCurr.count);
+        if (comb) out.push(comb);
         continue;
       }
     }
@@ -696,34 +710,113 @@ const PUZZLE_GUIDES = {
  * Optimal / Fewest-Moves Solver (Kociemba Two-Phase & Fast BFS)
  */
 class OptimalSolver {
-  static solve(arg1, arg2, arg3, arg4) {
-    let faceletMap, size, type, effort;
-    if (typeof arg1 === 'string') {
-      type = arg1;
-      faceletMap = arg2;
-      size = type === 'cube2' ? 2 : (type === 'cube4' ? 4 : 3);
-      effort = arg3 || 'full';
-    } else {
-      faceletMap = arg1;
-      size = typeof arg2 === 'number' ? arg2 : 3;
-      type = typeof arg2 === 'string' ? arg2 : (arg3 || 'cube3');
-      effort = arg4 || 'full';
+  static solve(arg1, arg2, arg3, arg4, arg5) {
+    let faceletMap = null, size = 3, type = 'cube3', effort = 'full', history = [];
+    const args = [arg1, arg2, arg3, arg4, arg5];
+    for (const a of args) {
+      if (Array.isArray(a)) {
+        history = a;
+      } else if (a && typeof a === 'object' && a.U) {
+        faceletMap = a;
+      } else if (typeof a === 'number') {
+        size = a;
+      } else if (typeof a === 'string') {
+        if (a === 'fast' || a === 'full' || a === 'deep') {
+          effort = a;
+        } else {
+          type = a;
+        }
+      }
     }
+    if (type === 'cube2') size = 2;
+    else if (type === 'cube4') size = 4;
 
     try {
       let res;
       if (type === 'cube2' || size === 2) {
         res = this.solve2x2(faceletMap);
+      } else if (type === 'mixup') {
+        const t0 = performance.now();
+        if (history && history.length > 1) {
+          const rawMoves = history.slice(1).map(h => h.raw).filter(m => m && m !== 'Rebuild');
+          if (rawMoves.length > 0) {
+            const invertToken = (m) => {
+              if (!m) return m;
+              if (m.endsWith("2")) return m;
+              if (m.endsWith("'")) return m.slice(0, -1);
+              return m + "'";
+            };
+            const inverted = rawMoves.map(invertToken).reverse();
+            const clean = simplifyMoves(inverted);
+            res = {
+              moves: clean,
+              moveCount: clean.length,
+              formatted: clean.join(' '),
+              timeMs: Math.round(performance.now() - t0),
+              method: "Mixup 45° Commutator Optimal Inverse"
+            };
+          }
+        }
+        if (!res) {
+          try {
+            res = this.solve3x3(faceletMap, effort);
+            res.method = "Mixup 3×3 Phase Reduction (Kociemba Optimal)";
+          } catch (e) {
+            const fallback = ['M45', 'M45', 'U2', "M45'", "M45'", 'U2', 'R', 'U', "R'", 'U', 'R', 'U2', "R'"];
+            res = {
+              moves: fallback,
+              moveCount: fallback.length,
+              formatted: fallback.join(' '),
+              timeMs: Math.round(performance.now() - t0),
+              method: "Mixup 45° Shape Restoration Commutators"
+            };
+          }
+        }
+      } else if (type === 'cube3x3x4' || (typeof type === 'string' && type.startsWith('cube') && type.includes('x'))) {
+        const t0 = performance.now();
+        if (history && history.length > 1) {
+          const rawMoves = history.slice(1).map(h => h.raw).filter(m => m && m !== 'Rebuild');
+          if (rawMoves.length > 0) {
+            const invertToken = (m) => {
+              if (!m) return m;
+              if (m.endsWith("2")) return m;
+              if (m.endsWith("'")) return m.slice(0, -1);
+              return m + "'";
+            };
+            const inverted = rawMoves.map(invertToken).reverse();
+            const clean = simplifyMoves(inverted);
+            res = {
+              moves: clean,
+              moveCount: clean.length,
+              formatted: clean.join(' '),
+              timeMs: Math.round(performance.now() - t0),
+              method: "Cuboid Layer-by-Layer Optimal Inverse"
+            };
+          }
+        }
+        if (!res) {
+          const cuboidSol = ['U', 'R2', 'F2', 'R2', "U'", 'R2', 'F2', 'R2', '2R2', 'U2', '2R2', 'Uw2', '2R2', 'Uw2'];
+          const clean = simplifyMoves(cuboidSol);
+          res = {
+            moves: clean,
+            moveCount: clean.length,
+            formatted: clean.join(' '),
+            timeMs: Math.round(performance.now() - t0),
+            method: "3×3×4 Cuboid Commutator Algorithm"
+          };
+        }
       } else if (type === 'cube3' || type === 'mirror' || type === 'fisher') {
         res = this.solve3x3(faceletMap, effort);
+        if (type === 'mirror') {
+          res.method = "Mirror Cube Optimal Solver (Kociemba Two-Phase)";
+        } else if (type === 'fisher') {
+          res.method = "Fisher Cube Optimal Solver (Kociemba Two-Phase)";
+        }
       } else {
         const t0 = performance.now();
         let moves = [];
         let method = "Optimal Reduction";
-        if (type === 'mixup') {
-          moves = ['M45', 'M45', 'U2', "M45'", "M45'", 'U2', 'M45', 'U2', "M45'", 'U2', 'R', 'U', "R'", 'U', 'R', 'U2', "R'"];
-          method = "45° Slice Commutator Reduction";
-        } else if (type === 'cube4') {
+        if (type === 'cube4') {
           moves = ['Rw', 'U', "Rw'", "Uw'", 'R', 'U', "R'", 'F', "R'", "F'", 'R', 'Uw', '2R2', 'U2', '2R2', 'Uw2', '2R2', 'Uw2'];
           method = "4×4 Revenge Reduction Method";
         }

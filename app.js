@@ -122,11 +122,25 @@ class Rebuilder3DPainter {
     this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    const intersects = this.raycaster.intersectObjects(this.cubies, false);
+    const targetObjects = (this.stickerMeshes && this.stickerMeshes.length > 0) ? this.stickerMeshes : this.cubies;
+    const intersects = this.raycaster.intersectObjects(targetObjects, true);
     if (intersects.length === 0) return null;
 
     const hit = intersects[0];
-    const cubie = hit.object;
+    const obj = hit.object;
+
+    if (obj.userData && obj.userData.isStickerMesh) {
+      const normal = hit.face ? hit.face.normal.clone().applyQuaternion(obj.getWorldQuaternion(new THREE.Quaternion())).normalize() : new THREE.Vector3(0, 1, 0);
+      return {
+        face: obj.userData.face,
+        idx: obj.userData.idx,
+        cubie: obj,
+        normal,
+        point: hit.point
+      };
+    }
+
+    const cubie = obj;
     if (!cubie.userData) return null;
 
     const normal = hit.face.normal.clone().applyQuaternion(cubie.quaternion).normalize();
@@ -142,20 +156,22 @@ class Rebuilder3DPainter {
 
     if (!face) return null;
 
-    const N = this.size;
+    const Nx = this.dimensions ? this.dimensions.x : this.size;
+    const Ny = this.dimensions ? this.dimensions.y : this.size;
+    const Nz = this.dimensions ? this.dimensions.z : this.size;
     const gx = cubie.userData.gx;
     const gy = cubie.userData.gy;
     const gz = cubie.userData.gz;
 
     let idx = 0;
-    if (face === 'U') idx = gz * N + gx;
-    else if (face === 'D') idx = (N - 1 - gz) * N + gx;
-    else if (face === 'F') idx = (N - 1 - gy) * N + gx;
-    else if (face === 'B') idx = (N - 1 - gy) * N + (N - 1 - gx);
-    else if (face === 'R') idx = (N - 1 - gy) * N + (N - 1 - gz);
-    else if (face === 'L') idx = (N - 1 - gy) * N + gz;
+    if (face === 'U') idx = gz * Nx + gx;
+    else if (face === 'D') idx = (Nz - 1 - gz) * Nx + gx;
+    else if (face === 'F') idx = (Ny - 1 - gy) * Nx + gx;
+    else if (face === 'B') idx = (Ny - 1 - gy) * Nx + (Nx - 1 - gx);
+    else if (face === 'R') idx = (Ny - 1 - gy) * Nz + (Nz - 1 - gz);
+    else if (face === 'L') idx = (Ny - 1 - gy) * Nz + gz;
 
-    return { face, idx, cubie, localMatIdx, normal };
+    return { face, idx, cubie, localMatIdx, normal, point: hit.point };
   }
 
   handlePointerMove(e) {
@@ -230,30 +246,44 @@ class Rebuilder3DPainter {
     return mat;
   }
 
-  build(size = 3, theme = null, netFaces = null) {
+  build(size = 3, theme = null, netFaces = null, puzzleType = 'cube3') {
     this.initThree();
     this.size = size;
+    this.puzzleType = puzzleType;
     if (theme) {
       this.theme = theme;
       this.materialsCache = {};
     }
 
-    const N = this.size;
+    const reg = (typeof puzzleRegistry !== 'undefined') ? puzzleRegistry.get(puzzleType) : null;
+    let dims = [size, size, size];
+    if (reg && reg.dimensions) {
+      dims = reg.dimensions;
+    } else if (puzzleType === 'cube3x3x4') {
+      dims = [3, 4, 3];
+    }
+    const [Nx, Ny, Nz] = dims;
+    this.dimensions = { x: Nx, y: Ny, z: Nz };
+
     const net = netFaces || {
-      U: Array(N * N).fill('U'),
-      D: Array(N * N).fill('D'),
-      F: Array(N * N).fill('F'),
-      B: Array(N * N).fill('B'),
-      R: Array(N * N).fill('R'),
-      L: Array(N * N).fill('L')
+      U: Array(Nx * Nz).fill('U'),
+      D: Array(Nx * Nz).fill('D'),
+      F: Array(Nx * Ny).fill('F'),
+      B: Array(Nx * Ny).fill('B'),
+      R: Array(Nz * Ny).fill('R'),
+      L: Array(Nz * Ny).fill('L')
     };
 
     while (this.cubeGroup.children.length > 0) {
-      this.cubeGroup.remove(this.cubeGroup.children[0]);
+      const obj = this.cubeGroup.children[0];
+      this.cubeGroup.remove(obj);
+      if (obj.geometry) obj.geometry.dispose();
     }
 
     this.cubies = [];
+    this.stickerMeshes = [];
     this.faceletCubieMap = { U: [], D: [], F: [], B: [], R: [], L: [] };
+    this.stickerMeshMap = { U: [], D: [], F: [], B: [], R: [], L: [] };
 
     this.bodyMaterial = new THREE.MeshStandardMaterial({
       color: 0x121316,
@@ -261,58 +291,21 @@ class Rebuilder3DPainter {
       metalness: 0.1
     });
 
-    const offset = (N - 1) / 2;
-    const geom = new THREE.BoxGeometry(0.96, 0.96, 0.96);
-
-    for (let x = 0; x < N; x++) {
-      for (let y = 0; y < N; y++) {
-        for (let z = 0; z < N; z++) {
-          const isExt = (x === 0 || x === N - 1 || y === 0 || y === N - 1 || z === 0 || z === N - 1);
-          if (!isExt) continue;
-
-          // Material slots: 0:R, 1:L, 2:U, 3:D, 4:F, 5:B
-          const mats = [
-            this.bodyMaterial,
-            this.bodyMaterial,
-            this.bodyMaterial,
-            this.bodyMaterial,
-            this.bodyMaterial,
-            this.bodyMaterial
-          ];
-
-          const idxU = z * N + x;
-          const idxD = (N - 1 - z) * N + x;
-          const idxF = (N - 1 - y) * N + x;
-          const idxB = (N - 1 - y) * N + (N - 1 - x);
-          const idxR = (N - 1 - y) * N + (N - 1 - z);
-          const idxL = (N - 1 - y) * N + z;
-
-          if (x === N - 1) mats[0] = this.getStickerMaterial(net.R ? net.R[idxR] : 'R');
-          if (x === 0)     mats[1] = this.getStickerMaterial(net.L ? net.L[idxL] : 'L');
-          if (y === N - 1) mats[2] = this.getStickerMaterial(net.U ? net.U[idxU] : 'U');
-          if (y === 0)     mats[3] = this.getStickerMaterial(net.D ? net.D[idxD] : 'D');
-          if (z === N - 1) mats[4] = this.getStickerMaterial(net.F ? net.F[idxF] : 'F');
-          if (z === 0)     mats[5] = this.getStickerMaterial(net.B ? net.B[idxB] : 'B');
-
-          const cubie = new THREE.Mesh(geom, mats);
-          cubie.position.set(x - offset, y - offset, z - offset);
-          cubie.userData = { gx: x, gy: y, gz: z };
-
-          if (x === N - 1) this.faceletCubieMap.R[idxR] = { cubie, matIdx: 0 };
-          if (x === 0)     this.faceletCubieMap.L[idxL] = { cubie, matIdx: 1 };
-          if (y === N - 1) this.faceletCubieMap.U[idxU] = { cubie, matIdx: 2 };
-          if (y === 0)     this.faceletCubieMap.D[idxD] = { cubie, matIdx: 3 };
-          if (z === N - 1) this.faceletCubieMap.F[idxF] = { cubie, matIdx: 4 };
-          if (z === 0)     this.faceletCubieMap.B[idxB] = { cubie, matIdx: 5 };
-
-          this.cubies.push(cubie);
-          this.cubeGroup.add(cubie);
-        }
-      }
+    if (puzzleType === 'mirror') {
+      this.buildMirror3D(net);
+    } else if (puzzleType === 'fisher') {
+      this.buildFisher3D(net);
+    } else if (puzzleType === 'mixup') {
+      this.buildMixup3D(net);
+    } else if (reg && reg.isCuboid) {
+      this.buildCuboid3D(Nx, Ny, Nz, net);
+    } else {
+      this.buildStandard3D(Nx, Ny, Nz, net);
     }
 
+    const maxDim = Math.max(Nx, Ny, Nz);
     const distMap = { 2: 5.6, 3: 7.2, 4: 9.0 };
-    const dist = distMap[N] || 7.2;
+    const dist = distMap[maxDim] || (maxDim * 2.1 + 1.8);
     this.camera.position.set(dist * 0.75, dist * 0.65, dist * 0.95);
     this.camera.lookAt(0, 0, 0);
     if (this.controls) {
@@ -321,7 +314,321 @@ class Rebuilder3DPainter {
     }
   }
 
+  buildMirror3D(net) {
+    const Tx = [0.65, 1.0, 1.35];
+    const Ty = [0.75, 1.0, 1.25];
+    const Tz = [0.85, 1.0, 1.15];
+    const Cx = [-0.5 - Tx[0] / 2, 0, 0.5 + Tx[2] / 2];
+    const Cy = [-0.5 - Ty[0] / 2, 0, 0.5 + Ty[2] / 2];
+    const Cz = [-0.5 - Tz[0] / 2, 0, 0.5 + Tz[2] / 2];
+
+    for (let x = 0; x < 3; x++) {
+      for (let y = 0; y < 3; y++) {
+        for (let z = 0; z < 3; z++) {
+          const isExt = (x === 0 || x === 2 || y === 0 || y === 2 || z === 0 || z === 2);
+          if (!isExt) continue;
+
+          const mats = [
+            this.bodyMaterial, this.bodyMaterial, this.bodyMaterial,
+            this.bodyMaterial, this.bodyMaterial, this.bodyMaterial
+          ];
+
+          const idxU = z * 3 + x;
+          const idxD = (2 - z) * 3 + x;
+          const idxF = (2 - y) * 3 + x;
+          const idxB = (2 - y) * 3 + (2 - x);
+          const idxR = (2 - y) * 3 + (2 - z);
+          const idxL = (2 - y) * 3 + z;
+
+          if (x === 2) mats[0] = this.getStickerMaterial(net.R ? net.R[idxR] : 'R');
+          if (x === 0) mats[1] = this.getStickerMaterial(net.L ? net.L[idxL] : 'L');
+          if (y === 2) mats[2] = this.getStickerMaterial(net.U ? net.U[idxU] : 'U');
+          if (y === 0) mats[3] = this.getStickerMaterial(net.D ? net.D[idxD] : 'D');
+          if (z === 2) mats[4] = this.getStickerMaterial(net.F ? net.F[idxF] : 'F');
+          if (z === 0) mats[5] = this.getStickerMaterial(net.B ? net.B[idxB] : 'B');
+
+          const geom = new THREE.BoxGeometry(Tx[x] - 0.04, Ty[y] - 0.04, Tz[z] - 0.04);
+          const cubie = new THREE.Mesh(geom, mats);
+          cubie.position.set(Cx[x], Cy[y], Cz[z]);
+          cubie.userData = { gx: x, gy: y, gz: z, isMirror: true };
+
+          if (x === 2) this.faceletCubieMap.R[idxR] = { cubie, matIdx: 0 };
+          if (x === 0) this.faceletCubieMap.L[idxL] = { cubie, matIdx: 1 };
+          if (y === 2) this.faceletCubieMap.U[idxU] = { cubie, matIdx: 2 };
+          if (y === 0) this.faceletCubieMap.D[idxD] = { cubie, matIdx: 3 };
+          if (z === 2) this.faceletCubieMap.F[idxF] = { cubie, matIdx: 4 };
+          if (z === 0) this.faceletCubieMap.B[idxB] = { cubie, matIdx: 5 };
+
+          this.cubies.push(cubie);
+          this.cubeGroup.add(cubie);
+        }
+      }
+    }
+  }
+
+  buildFisher3D(net) {
+    const L = 1.5 * Math.SQRT2;
+
+    const getFisherCellPolygon = (x0, z0) => {
+      if (x0 === 0 && z0 === 0) return [[-0.48, -0.48], [0.48, -0.48], [0.48, 0.48], [-0.48, 0.48]];
+      if (x0 === 1 && z0 === 0) return [[-0.5, -0.5], [-0.5, 0.5], [L - 1.5, 0.5], [L - 1.0, 0], [L - 1.5, -0.5]];
+      if (x0 === -1 && z0 === 0) return [[0.5, 0.5], [0.5, -0.5], [-(L - 1.5), -0.5], [-(L - 1.0), 0], [-(L - 1.5), 0.5]];
+      if (x0 === 0 && z0 === 1) return [[-0.5, -0.5], [0.5, -0.5], [0.5, L - 1.5], [0, L - 1.0], [-0.5, L - 1.5]];
+      if (x0 === 0 && z0 === -1) return [[0.5, 0.5], [-0.5, 0.5], [-0.5, -(L - 1.5)], [0, -(L - 1.0)], [0.5, -(L - 1.5)]];
+      if (x0 === 1 && z0 === 1) return [[-0.5, -0.5], [L - 1.5, -0.5], [-0.5, L - 1.5]];
+      if (x0 === -1 && z0 === 1) return [[0.5, -0.5], [0.5, L - 1.5], [-(L - 1.5), -0.5]];
+      if (x0 === -1 && z0 === -1) return [[0.5, 0.5], [-(L - 1.5), 0.5], [0.5, -(L - 1.5)]];
+      if (x0 === 1 && z0 === -1) return [[-0.5, 0.5], [-0.5, -(L - 1.5)], [L - 1.5, 0.5]];
+      return [];
+    };
+
+    const createPolygonShape = (pts, inset = 0) => {
+      const shape = new THREE.Shape();
+      if (pts.length < 3) return shape;
+      if (inset === 0) {
+        shape.moveTo(pts[0][0], -pts[0][1]);
+        for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], -pts[i][1]);
+        shape.closePath();
+        return shape;
+      }
+      let cx = 0, cz = 0;
+      for (const p of pts) { cx += p[0]; cz += p[1]; }
+      cx /= pts.length; cz /= pts.length;
+      const scale = Math.max(0.6, 1 - inset);
+      shape.moveTo(cx + (pts[0][0] - cx) * scale, -(cz + (pts[0][1] - cz) * scale));
+      for (let i = 1; i < pts.length; i++) shape.lineTo(cx + (pts[i][0] - cx) * scale, -(cz + (pts[i][1] - cz) * scale));
+      shape.closePath();
+      return shape;
+    };
+
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        for (let z = -1; z <= 1; z++) {
+          const isExt = (x !== 0 || y !== 0 || z !== 0);
+          if (!isExt) continue;
+
+          const group = new THREE.Group();
+          const pts = getFisherCellPolygon(x, z);
+
+          const bodyShape = createPolygonShape(pts, 0);
+          const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, { depth: 0.93, bevelEnabled: false });
+          bodyGeo.translate(0, 0, -0.465);
+          bodyGeo.rotateX(-Math.PI / 2);
+          const bodyMesh = new THREE.Mesh(bodyGeo, this.bodyMaterial);
+          group.add(bodyMesh);
+
+          const gx = x + 1;
+          const gy = y + 1;
+          const gz = z + 1;
+
+          if (y === 1) {
+            const idxU = gz * 3 + gx;
+            const topShape = createPolygonShape(pts, 0.08);
+            const topGeo = new THREE.ShapeGeometry(topShape);
+            topGeo.rotateX(-Math.PI / 2);
+            topGeo.translate(0, 0.485, 0);
+            const topMesh = new THREE.Mesh(topGeo, this.getStickerMaterial(net.U ? net.U[idxU] : 'U'));
+            topMesh.userData = { face: 'U', idx: idxU, isStickerMesh: true };
+            this.stickerMeshes.push(topMesh);
+            this.stickerMeshMap.U[idxU] = topMesh;
+            group.add(topMesh);
+          }
+
+          if (y === -1) {
+            const idxD = (2 - gz) * 3 + gx;
+            const botShape = createPolygonShape(pts, 0.08);
+            const botGeo = new THREE.ShapeGeometry(botShape);
+            botGeo.rotateX(-Math.PI / 2);
+            botGeo.translate(0, -0.485, 0);
+            const botMesh = new THREE.Mesh(botGeo, this.getStickerMaterial(net.D ? net.D[idxD] : 'D'));
+            botMesh.userData = { face: 'D', idx: idxD, isStickerMesh: true };
+            this.stickerMeshes.push(botMesh);
+            this.stickerMeshMap.D[idxD] = botMesh;
+            group.add(botMesh);
+          }
+
+          for (let i = 0; i < pts.length; i++) {
+            const p1 = pts[i];
+            const p2 = pts[(i + 1) % pts.length];
+            const mx = x + (p1[0] + p2[0]) / 2;
+            const mz = z + (p1[1] + p2[1]) / 2;
+
+            let wallFace = null;
+            let normal = null;
+            if (Math.abs(mx + mz - L) < 0.02) {
+              wallFace = 'F'; normal = [1 / Math.SQRT2, 1 / Math.SQRT2];
+            } else if (Math.abs(mx - mz - L) < 0.02) {
+              wallFace = 'R'; normal = [1 / Math.SQRT2, -1 / Math.SQRT2];
+            } else if (Math.abs(-mx - mz - L) < 0.02) {
+              wallFace = 'B'; normal = [-1 / Math.SQRT2, -1 / Math.SQRT2];
+            } else if (Math.abs(-mx + mz - L) < 0.02) {
+              wallFace = 'L'; normal = [-1 / Math.SQRT2, 1 / Math.SQRT2];
+            }
+
+            if (wallFace && normal) {
+              const dx = p2[0] - p1[0];
+              const dz = p2[1] - p1[1];
+              const len = Math.sqrt(dx * dx + dz * dz);
+              if (len > 0.05) {
+                let wallIdx = 0;
+                if (wallFace === 'F') wallIdx = (2 - gy) * 3 + gx;
+                else if (wallFace === 'B') wallIdx = (2 - gy) * 3 + (2 - gx);
+                else if (wallFace === 'R') wallIdx = (2 - gy) * 3 + (2 - gz);
+                else if (wallFace === 'L') wallIdx = (2 - gy) * 3 + gz;
+
+                const margin = 0.035;
+                const insetFactor = Math.min(0.2, margin / len);
+                const s1x = p1[0] + dx * insetFactor;
+                const s1z = p1[1] + dz * insetFactor;
+                const s2x = p2[0] - dx * insetFactor;
+                const s2z = p2[1] - dz * insetFactor;
+
+                const wallOff = 0.015;
+                const wallGeo = new THREE.BufferGeometry();
+                const v1 = [s1x + normal[0] * wallOff, -0.44, s1z + normal[1] * wallOff];
+                const v2 = [s2x + normal[0] * wallOff, -0.44, s2z + normal[1] * wallOff];
+                const v3 = [s2x + normal[0] * wallOff,  0.44, s2z + normal[1] * wallOff];
+                const v4 = [s1x + normal[0] * wallOff,  0.44, s1z + normal[1] * wallOff];
+
+                const positions = new Float32Array([
+                  v1[0], v1[1], v1[2], v2[0], v2[1], v2[2], v3[0], v3[1], v3[2],
+                  v1[0], v1[1], v1[2], v3[0], v3[1], v3[2], v4[0], v4[1], v4[2]
+                ]);
+                wallGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                wallGeo.computeVertexNormals();
+
+                const stickerVal = (net[wallFace] && net[wallFace][wallIdx]) ? net[wallFace][wallIdx] : wallFace;
+                const wallMesh = new THREE.Mesh(wallGeo, this.getStickerMaterial(stickerVal));
+                wallMesh.userData = { face: wallFace, idx: wallIdx, isStickerMesh: true };
+                this.stickerMeshes.push(wallMesh);
+                this.stickerMeshMap[wallFace][wallIdx] = wallMesh;
+                group.add(wallMesh);
+              }
+            }
+          }
+
+          group.position.set(x * 1.0, y * 1.0, z * 1.0);
+          group.userData = { gx, gy, gz, isFisher: true };
+          this.cubies.push(group);
+          this.cubeGroup.add(group);
+        }
+      }
+    }
+  }
+
+  buildMixup3D(net) {
+    const S = 3.0 / (2 + Math.SQRT2);
+    const M = S * Math.SQRT2;
+    const T = [S, M, S];
+    const C = [-M / 2 - S / 2, 0, M / 2 + S / 2];
+    const gap = 0.035;
+
+    const coreGeo = new THREE.SphereGeometry(M * 0.72, 32, 32);
+    const coreMesh = new THREE.Mesh(coreGeo, this.bodyMaterial);
+    this.cubeGroup.add(coreMesh);
+
+    for (let x = 0; x < 3; x++) {
+      for (let y = 0; y < 3; y++) {
+        for (let z = 0; z < 3; z++) {
+          const isExt = (x === 0 || x === 2 || y === 0 || y === 2 || z === 0 || z === 2);
+          if (!isExt) continue;
+
+          const mats = [
+            this.bodyMaterial, this.bodyMaterial, this.bodyMaterial,
+            this.bodyMaterial, this.bodyMaterial, this.bodyMaterial
+          ];
+
+          const idxU = z * 3 + x;
+          const idxD = (2 - z) * 3 + x;
+          const idxF = (2 - y) * 3 + x;
+          const idxB = (2 - y) * 3 + (2 - x);
+          const idxR = (2 - y) * 3 + (2 - z);
+          const idxL = (2 - y) * 3 + z;
+
+          if (x === 2) mats[0] = this.getStickerMaterial(net.R ? net.R[idxR] : 'R');
+          if (x === 0) mats[1] = this.getStickerMaterial(net.L ? net.L[idxL] : 'L');
+          if (y === 2) mats[2] = this.getStickerMaterial(net.U ? net.U[idxU] : 'U');
+          if (y === 0) mats[3] = this.getStickerMaterial(net.D ? net.D[idxD] : 'D');
+          if (z === 2) mats[4] = this.getStickerMaterial(net.F ? net.F[idxF] : 'F');
+          if (z === 0) mats[5] = this.getStickerMaterial(net.B ? net.B[idxB] : 'B');
+
+          const cubieGeo = new THREE.BoxGeometry(T[x] - gap, T[y] - gap, T[z] - gap);
+          const cubie = new THREE.Mesh(cubieGeo, mats);
+          cubie.position.set(C[x], C[y], C[z]);
+          cubie.userData = { gx: x, gy: y, gz: z, isMixup: true };
+
+          if (x === 2) this.faceletCubieMap.R[idxR] = { cubie, matIdx: 0 };
+          if (x === 0) this.faceletCubieMap.L[idxL] = { cubie, matIdx: 1 };
+          if (y === 2) this.faceletCubieMap.U[idxU] = { cubie, matIdx: 2 };
+          if (y === 0) this.faceletCubieMap.D[idxD] = { cubie, matIdx: 3 };
+          if (z === 2) this.faceletCubieMap.F[idxF] = { cubie, matIdx: 4 };
+          if (z === 0) this.faceletCubieMap.B[idxB] = { cubie, matIdx: 5 };
+
+          this.cubies.push(cubie);
+          this.cubeGroup.add(cubie);
+        }
+      }
+    }
+  }
+
+  buildCuboid3D(Nx, Ny, Nz, net) {
+    this.buildStandard3D(Nx, Ny, Nz, net);
+  }
+
+  buildStandard3D(Nx, Ny, Nz, net) {
+    const offsetX = (Nx - 1) / 2;
+    const offsetY = (Ny - 1) / 2;
+    const offsetZ = (Nz - 1) / 2;
+    const geom = new THREE.BoxGeometry(0.96, 0.96, 0.96);
+
+    for (let x = 0; x < Nx; x++) {
+      for (let y = 0; y < Ny; y++) {
+        for (let z = 0; z < Nz; z++) {
+          const isExt = (x === 0 || x === Nx - 1 || y === 0 || y === Ny - 1 || z === 0 || z === Nz - 1);
+          if (!isExt) continue;
+
+          const mats = [
+            this.bodyMaterial, this.bodyMaterial, this.bodyMaterial,
+            this.bodyMaterial, this.bodyMaterial, this.bodyMaterial
+          ];
+
+          const idxU = z * Nx + x;
+          const idxD = (Nz - 1 - z) * Nx + x;
+          const idxF = (Ny - 1 - y) * Nx + x;
+          const idxB = (Ny - 1 - y) * Nx + (Nx - 1 - x);
+          const idxR = (Ny - 1 - y) * Nz + (Nz - 1 - z);
+          const idxL = (Ny - 1 - y) * Nz + z;
+
+          if (x === Nx - 1) mats[0] = this.getStickerMaterial(net.R ? net.R[idxR] : 'R');
+          if (x === 0)      mats[1] = this.getStickerMaterial(net.L ? net.L[idxL] : 'L');
+          if (y === Ny - 1) mats[2] = this.getStickerMaterial(net.U ? net.U[idxU] : 'U');
+          if (y === 0)      mats[3] = this.getStickerMaterial(net.D ? net.D[idxD] : 'D');
+          if (z === Nz - 1) mats[4] = this.getStickerMaterial(net.F ? net.F[idxF] : 'F');
+          if (z === 0)      mats[5] = this.getStickerMaterial(net.B ? net.B[idxB] : 'B');
+
+          const cubie = new THREE.Mesh(geom, mats);
+          cubie.position.set(x - offsetX, y - offsetY, z - offsetZ);
+          cubie.userData = { gx: x, gy: y, gz: z };
+
+          if (x === Nx - 1) this.faceletCubieMap.R[idxR] = { cubie, matIdx: 0 };
+          if (x === 0)      this.faceletCubieMap.L[idxL] = { cubie, matIdx: 1 };
+          if (y === Ny - 1) this.faceletCubieMap.U[idxU] = { cubie, matIdx: 2 };
+          if (y === 0)      this.faceletCubieMap.D[idxD] = { cubie, matIdx: 3 };
+          if (z === Nz - 1) this.faceletCubieMap.F[idxF] = { cubie, matIdx: 4 };
+          if (z === 0)      this.faceletCubieMap.B[idxB] = { cubie, matIdx: 5 };
+
+          this.cubies.push(cubie);
+          this.cubeGroup.add(cubie);
+        }
+      }
+    }
+  }
+
   updateFacelet(face, idx, colorCode) {
+    if (this.stickerMeshMap && this.stickerMeshMap[face] && this.stickerMeshMap[face][idx]) {
+      this.stickerMeshMap[face][idx].material = this.getStickerMaterial(colorCode);
+      return;
+    }
     const item = (this.faceletCubieMap && this.faceletCubieMap[face]) ? this.faceletCubieMap[face][idx] : null;
     if (!item || !item.cubie) return;
     const mat = this.getStickerMaterial(colorCode);
@@ -703,6 +1010,20 @@ class CubeApp {
     this.valRoughness = document.getElementById('val-roughness');
     this.sliderMetalness = document.getElementById('slider-metalness');
     this.valMetalness = document.getElementById('val-metalness');
+
+    // Custom Cube Builder Elements
+    this.btnOpenCustomBuilder = document.getElementById('btn-open-custom-builder');
+    this.modalCustomCube = document.getElementById('modal-custom-cube');
+    this.btnCloseCustomBuilder = document.getElementById('btn-close-custom-builder');
+    this.customDimX = document.getElementById('custom-dim-x');
+    this.customDimY = document.getElementById('custom-dim-y');
+    this.customDimZ = document.getElementById('custom-dim-z');
+    this.customCubeName = document.getElementById('custom-cube-name');
+    this.customCubeId = document.getElementById('custom-cube-id');
+    this.customCodePreview = document.getElementById('custom-code-preview');
+    this.btnCopyCubeCode = document.getElementById('btn-copy-cube-code');
+    this.btnCreateCustomCube = document.getElementById('btn-create-custom-cube');
+    this.cuboidPresetBtns = document.querySelectorAll('.btn-cuboid-preset');
   }
 
   initPresets() {
@@ -752,6 +1073,12 @@ class CubeApp {
         { name: 'Mixup 45° Star Shape', seq: "M45 E45 S45" },
         { name: 'Mixup 45° Reset', seq: "S45' E45' M45'" },
         { name: 'Oskar Edge-Center Cycle', seq: "M45 M45 U2 M45' M45' U2" }
+      ],
+      cube3x3x4: [
+        { name: 'Layer Flip & Edge Swap', seq: "R2 U2 R2 U2 R2" },
+        { name: 'Adjacent Corner Swap', seq: "R2 U R2 U' R2 F2 U' F2 U F2" },
+        { name: 'Opposite Corner Swap', seq: "R2 U2 R2 U2 R2 U2" },
+        { name: 'Middle Layer Edge Parity', seq: "2R2 U2 2R2 Uw2 2R2 2U2" }
       ]
     };
   }
@@ -799,6 +1126,61 @@ class CubeApp {
         this.switchPuzzle(newSize, newType);
       });
     });
+
+    // Custom Cube Builder Studio Events
+    if (this.btnOpenCustomBuilder && this.modalCustomCube) {
+      this.btnOpenCustomBuilder.addEventListener('click', () => {
+        this.openCustomCubeModal();
+      });
+    }
+
+    if (this.btnCloseCustomBuilder && this.modalCustomCube) {
+      this.btnCloseCustomBuilder.addEventListener('click', () => {
+        this.modalCustomCube.classList.add('hidden');
+      });
+    }
+
+    if (this.customDimX) this.customDimX.addEventListener('input', () => this.updateCustomCubePreview());
+    if (this.customDimY) this.customDimY.addEventListener('input', () => this.updateCustomCubePreview());
+    if (this.customDimZ) this.customDimZ.addEventListener('input', () => this.updateCustomCubePreview());
+    if (this.customCubeName) this.customCubeName.addEventListener('input', () => this.updateCustomCubePreview());
+
+    if (this.cuboidPresetBtns) {
+      this.cuboidPresetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.cuboidPresetBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const x = parseInt(btn.dataset.x, 10) || 3;
+          const y = parseInt(btn.dataset.y, 10) || 4;
+          const z = parseInt(btn.dataset.z, 10) || 3;
+          const name = btn.dataset.name || `${x}×${y}×${z} Cuboid`;
+          if (this.customDimX) this.customDimX.value = x;
+          if (this.customDimY) this.customDimY.value = y;
+          if (this.customDimZ) this.customDimZ.value = z;
+          if (this.customCubeName) this.customCubeName.value = name;
+          this.updateCustomCubePreview();
+        });
+      });
+    }
+
+    if (this.btnCopyCubeCode) {
+      this.btnCopyCubeCode.addEventListener('click', () => {
+        const code = this.customCodePreview ? this.customCodePreview.textContent : '';
+        if (code) {
+          navigator.clipboard.writeText(code).then(() => {
+            this.showToast('📋 JavaScript definition copied to clipboard!');
+          }).catch(() => {
+            this.showToast('Code copied!');
+          });
+        }
+      });
+    }
+
+    if (this.btnCreateCustomCube) {
+      this.btnCreateCustomCube.addEventListener('click', () => {
+        this.createCustomCube();
+      });
+    }
 
     // Cube Designer Modal Toggle
     if (this.btnToggleDesigner && this.designerModal) {
@@ -1418,6 +1800,15 @@ class CubeApp {
 
   switchPuzzle(newSize, newType) {
     this.stopPlayback();
+
+    const reg = (typeof puzzleRegistry !== 'undefined') ? puzzleRegistry.get(newType) : null;
+    if (reg) {
+      if (reg.size) newSize = reg.size;
+      else if (reg.dimensions) newSize = Math.max(...reg.dimensions);
+    } else if (newType === 'cube3x3x4') {
+      newSize = 4;
+    }
+
     this.currentSize = newSize;
     this.currentType = newType;
 
@@ -1434,12 +1825,97 @@ class CubeApp {
       cube2: '2×2 Pocket Cube',
       cube3: '3×3 Standard Cube',
       cube4: '4×4 Revenge Cube',
+      cube3x3x4: '3×3×4 Articulated Cuboid',
       fisher: 'Tony Fisher 45° Shape-Mod',
       mirror: 'Mirror / Bump Cube (Brushed Metallic)',
       mixup: 'WitEden & Oskar Mixup 3x3'
     };
 
-    this.showToast(`Switched to: ${names[newType] || newType}`);
+    const displayName = (reg && reg.name) ? reg.name : (names[newType] || newType);
+    this.showToast(`Switched to: ${displayName}`);
+  }
+
+  openCustomCubeModal() {
+    if (!this.modalCustomCube) return;
+    this.updateCustomCubePreview();
+    this.modalCustomCube.classList.remove('hidden');
+  }
+
+  updateCustomCubePreview() {
+    const x = parseInt(this.customDimX ? this.customDimX.value : 3, 10) || 3;
+    const y = parseInt(this.customDimY ? this.customDimY.value : 4, 10) || 4;
+    const z = parseInt(this.customDimZ ? this.customDimZ.value : 3, 10) || 3;
+    const name = this.customCubeName ? this.customCubeName.value.trim() : `${x}×${y}×${z} Cuboid`;
+    const id = `cube${x}x${y}x${z}`;
+
+    if (this.customCubeId) this.customCubeId.value = id;
+
+    const def = {
+      id: id,
+      name: name,
+      dimensions: [x, y, z],
+      category: 'Cuboid',
+      description: `Custom ${x}×${y}×${z} fully articulated twisty puzzle.`
+    };
+
+    if (this.customCodePreview && typeof window.generatePuzzleCodeSnippet === 'function') {
+      this.customCodePreview.textContent = window.generatePuzzleCodeSnippet(def);
+    }
+  }
+
+  createCustomCube() {
+    const x = Math.max(1, Math.min(8, parseInt(this.customDimX ? this.customDimX.value : 3, 10) || 3));
+    const y = Math.max(1, Math.min(8, parseInt(this.customDimY ? this.customDimY.value : 4, 10) || 4));
+    const z = Math.max(1, Math.min(8, parseInt(this.customDimZ ? this.customDimZ.value : 3, 10) || 3));
+    const name = (this.customCubeName ? this.customCubeName.value.trim() : '') || `${x}×${y}×${z} Cuboid`;
+    const id = `cube${x}x${y}x${z}`;
+
+    const def = {
+      id,
+      name,
+      dimensions: [x, y, z],
+      size: Math.max(x, y, z),
+      isCuboid: true,
+      category: 'Cuboid',
+      description: `Custom ${x}×${y}×${z} twisty puzzle.`
+    };
+
+    if (typeof window.definePuzzle === 'function') {
+      window.definePuzzle(def);
+    }
+
+    let btn = document.querySelector(`.size-btn[data-type="${id}"]`);
+    if (!btn) {
+      const container = document.querySelector('.size-selector');
+      if (container) {
+        btn = document.createElement('button');
+        btn.className = 'size-btn special';
+        btn.dataset.type = id;
+        btn.dataset.size = Math.max(x, y, z);
+        btn.textContent = `${x}×${y}×${z}`;
+        btn.title = name;
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.switchPuzzle(Math.max(x, y, z), id);
+        });
+        if (this.btnOpenCustomBuilder) {
+          container.insertBefore(btn, this.btnOpenCustomBuilder);
+        } else {
+          container.appendChild(btn);
+        }
+      }
+    }
+
+    if (this.modalCustomCube) {
+      this.modalCustomCube.classList.add('hidden');
+    }
+
+    document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    this.switchPuzzle(Math.max(x, y, z), id);
+    this.showToast(`🎉 Created & switched to ${name}!`);
   }
 
   updateKeypadForPuzzle() {
@@ -2077,16 +2553,25 @@ class CubeApp {
       cube2: '2×2 Pocket Cube',
       cube3: '3×3 Standard Cube',
       cube4: '4×4 Rubik\'s Revenge',
+      cube3x3x4: '3×3×4 Articulated Cuboid',
       mirror: '🪞 Mirror / Bump Cube',
       fisher: '🐟 Tony Fisher 45° Cube',
       mixup: '🔀 WitEden & Oskar Mixup 3×3'
     };
+    const reg = (typeof puzzleRegistry !== 'undefined') ? puzzleRegistry.get(this.currentType) : null;
     if (this.rebuilderPuzzleTypePill) {
-      this.rebuilderPuzzleTypePill.textContent = typeNames[this.currentType] || `${this.currentSize}×${this.currentSize}`;
+      this.rebuilderPuzzleTypePill.textContent = (reg && reg.name) ? reg.name : (typeNames[this.currentType] || `${this.currentSize}×${this.currentSize}`);
     }
 
-    const N = this.currentSize;
-    if (!this.rebuilderNet || !this.rebuilderNet.U || this.rebuilderNet.U.length !== N * N) {
+    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
+    const [Nx, Ny, Nz] = dims;
+    const expected = {
+      U: Nx * Nz, D: Nx * Nz,
+      F: Nx * Ny, B: Nx * Ny,
+      R: Nz * Ny, L: Nz * Ny
+    };
+    const isNetValid = this.rebuilderNet && ['U', 'D', 'F', 'B', 'R', 'L'].every(f => this.rebuilderNet[f] && this.rebuilderNet[f].length === expected[f]);
+    if (!isNetValid) {
       this.rebuilderNet = this.cube.getFaceletMap();
     }
 
@@ -2117,7 +2602,7 @@ class CubeApp {
     }
 
     if (this.rebuilder3DPainter) {
-      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet, this.currentType);
     }
 
     this.rebuilderModal.classList.remove('hidden');
@@ -2164,7 +2649,8 @@ class CubeApp {
   renderRebuilderNet() {
     if (!this.cubeUnfoldedNet) return;
     this.cubeUnfoldedNet.innerHTML = '';
-    const N = this.currentSize;
+    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
+    const [Nx, Ny, Nz] = dims;
 
     const th = this.cube ? this.cube.theme : {
       U: '#F7F8FA', D: '#FFD500', F: '#009E48', B: '#0046AD', R: '#C41230', L: '#FF5500'
@@ -2179,6 +2665,15 @@ class CubeApp {
       D: 'D (Bottom)'
     };
 
+    const faceGridDims = {
+      U: { cols: Nx, rows: Nz },
+      D: { cols: Nx, rows: Nz },
+      F: { cols: Nx, rows: Ny },
+      B: { cols: Nx, rows: Ny },
+      R: { cols: Nz, rows: Ny },
+      L: { cols: Nz, rows: Ny }
+    };
+
     const faces = ['U', 'L', 'F', 'R', 'B', 'D'];
 
     faces.forEach(face => {
@@ -2191,12 +2686,15 @@ class CubeApp {
       title.textContent = faceNames[face];
       card.appendChild(title);
 
+      const fDims = faceGridDims[face] || { cols: this.currentSize, rows: this.currentSize };
+      const totalTiles = fDims.cols * fDims.rows;
+
       const grid = document.createElement('div');
       grid.className = 'facelet-grid';
-      grid.style.gridTemplateColumns = `repeat(${N}, 26px)`;
-      grid.style.gridTemplateRows = `repeat(${N}, 26px)`;
+      grid.style.gridTemplateColumns = `repeat(${fDims.cols}, 26px)`;
+      grid.style.gridTemplateRows = `repeat(${fDims.rows}, 26px)`;
 
-      for (let i = 0; i < N * N; i++) {
+      for (let i = 0; i < totalTiles; i++) {
         const tile = document.createElement('div');
         tile.className = 'facelet-tile';
         tile.dataset.face = face;
@@ -2225,10 +2723,19 @@ class CubeApp {
 
   validateRebuilderNet() {
     if (!this.rebuilderNet) return false;
-    const N = this.currentSize;
-    const targetCount = N * N;
-    const counts = { U: 0, D: 0, F: 0, B: 0, R: 0, L: 0 };
+    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
+    const [Nx, Ny, Nz] = dims;
 
+    const expectedPerFace = {
+      U: Nx * Nz,
+      D: Nx * Nz,
+      F: Nx * Ny,
+      B: Nx * Ny,
+      R: Nz * Ny,
+      L: Nz * Ny
+    };
+
+    const counts = { U: 0, D: 0, F: 0, B: 0, R: 0, L: 0 };
     for (const f of ['U', 'D', 'F', 'B', 'R', 'L']) {
       const arr = this.rebuilderNet[f] || [];
       for (const val of arr) {
@@ -2238,6 +2745,7 @@ class CubeApp {
 
     for (const f of ['U', 'D', 'F', 'B', 'R', 'L']) {
       const el = document.getElementById(`brush-count-${f}`);
+      const targetCount = expectedPerFace[f];
       if (el) {
         const c = counts[f];
         el.textContent = `${c}/${targetCount}`;
@@ -2248,6 +2756,7 @@ class CubeApp {
     let isValid = true;
     const diffs = [];
     for (const f of ['U', 'D', 'F', 'B', 'R', 'L']) {
+      const targetCount = expectedPerFace[f];
       if (counts[f] !== targetCount) {
         isValid = false;
         const diff = counts[f] - targetCount;
@@ -2259,14 +2768,14 @@ class CubeApp {
       if (isValid) {
         this.rebuilderStatusBanner.className = 'rebuilder-status-banner valid';
         this.rebuilderStatusBanner.querySelector('.status-icon').textContent = '✅';
-        this.rebuilderStatusText.textContent = `Valid Cube State: exactly ${targetCount} facelets per color!`;
+        this.rebuilderStatusText.textContent = `Valid Puzzle State: stickers balanced!`;
         if (this.rebuilderStatusDetails) {
           this.rebuilderStatusDetails.textContent = 'All faces mathematically balanced. Ready to apply to 3D and solve.';
         }
       } else {
         this.rebuilderStatusBanner.className = 'rebuilder-status-banner invalid';
         this.rebuilderStatusBanner.querySelector('.status-icon').textContent = '⚠️';
-        this.rebuilderStatusText.textContent = `Imbalanced Stickers (each color requires ${targetCount} facelets)`;
+        this.rebuilderStatusText.textContent = `Imbalanced Stickers`;
         if (this.rebuilderStatusDetails) {
           this.rebuilderStatusDetails.textContent = diffs.join(' • ');
         }
@@ -2281,43 +2790,45 @@ class CubeApp {
     this.renderRebuilderNet();
     this.validateRebuilderNet();
     if (this.rebuilder3DPainter) {
-      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet, this.currentType);
     }
     this.showToast('📥 Loaded current 3D cube stickers into 2D net!');
   }
 
   rebuilderResetSolved() {
-    const N = this.currentSize;
+    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
+    const [Nx, Ny, Nz] = dims;
     this.rebuilderNet = {
-      U: Array(N * N).fill('U'),
-      D: Array(N * N).fill('D'),
-      F: Array(N * N).fill('F'),
-      B: Array(N * N).fill('B'),
-      R: Array(N * N).fill('R'),
-      L: Array(N * N).fill('L')
+      U: Array(Nx * Nz).fill('U'),
+      D: Array(Nx * Nz).fill('D'),
+      F: Array(Nx * Ny).fill('F'),
+      B: Array(Nx * Ny).fill('B'),
+      R: Array(Nz * Ny).fill('R'),
+      L: Array(Nz * Ny).fill('L')
     };
     this.renderRebuilderNet();
     this.validateRebuilderNet();
     if (this.rebuilder3DPainter) {
-      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet, this.currentType);
     }
     this.showToast('🔄 Net reset to solved cube pattern');
   }
 
   rebuilderClear() {
-    const N = this.currentSize;
+    const dims = (this.cube && this.cube.dimensions) ? this.cube.dimensions : [this.currentSize, this.currentSize, this.currentSize];
+    const [Nx, Ny, Nz] = dims;
     this.rebuilderNet = {
-      U: Array(N * N).fill('U'),
-      D: Array(N * N).fill('U'),
-      F: Array(N * N).fill('U'),
-      B: Array(N * N).fill('U'),
-      R: Array(N * N).fill('U'),
-      L: Array(N * N).fill('U')
+      U: Array(Nx * Nz).fill('U'),
+      D: Array(Nx * Nz).fill('U'),
+      F: Array(Nx * Ny).fill('U'),
+      B: Array(Nx * Ny).fill('U'),
+      R: Array(Nz * Ny).fill('U'),
+      L: Array(Nz * Ny).fill('U')
     };
     this.renderRebuilderNet();
     this.validateRebuilderNet();
     if (this.rebuilder3DPainter) {
-      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet);
+      this.rebuilder3DPainter.build(this.currentSize, this.cube ? this.cube.theme : null, this.rebuilderNet, this.currentType);
     }
     this.showToast('🧹 Cleared net stickers to blank white');
   }
@@ -2357,7 +2868,7 @@ class CubeApp {
 
     const faceletMap = this.cube.getFaceletMap();
     const startTime = performance.now();
-    const result = window.OptimalSolver.solve(this.currentType, faceletMap);
+    const result = window.OptimalSolver.solve(this.currentType, faceletMap, this.currentSize, 'full', this.history);
     const elapsed = Math.round(performance.now() - startTime);
     if (!result.timeMs) result.timeMs = elapsed;
 

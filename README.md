@@ -10,6 +10,7 @@ A responsive, high-performance 3D Rubik's Cube and twisty puzzle simulator built
 - **2×2 Pocket Cube**: Fast 4-piece corners simulation.
 - **3×3 Standard Rubik's Cube**: Full speedcube experience with smooth spring animations.
 - **4×4 Rubik's Revenge**: Multi-layer cube supporting inner slices and parity algorithms.
+- **🧱 3×3×4 Articulated Cuboid**: Fully articulated cuboid with 90° turns on top/bottom ($U/D$) and 180° turns on vertical layers ($R, L, F, B$).
 - **🐟 Fisher Cube (Tony Fisher 3×3 Shape Mod)**:
   - Formed by rotating the vertical cutting plane 45° around the core.
   - Three distinct piece geometries: square face centers, pentagonal corner-edges, and right-triangle corners.
@@ -22,6 +23,16 @@ A responsive, high-performance 3D Rubik's Cube and twisty puzzle simulator built
   - Invented by Oskar van Deventer and produced by WitEden.
   - Middle slices ($M, E, S$) can rotate in increments of **45°** (`M45`, `E45`, `S45`).
   - Allows edge and center pieces to swap roles, creating shape-shifting states and deep combinatorial puzzles.
+- **🛠️ Extensible Custom Cube Builder (Easy Code API)**:
+  - Create and register any custom cuboid ($N_x \times N_y \times N_z$, like 3×3×4, 2×2×3 Tower, 3×3×2 Domino, 3×3×5) with declarative code:
+    ```javascript
+    definePuzzle({
+      id: 'cube2x2x3',
+      name: '2×2×3 Tower Cube',
+      dimensions: [2, 3, 2]
+    });
+    ```
+  - Interactive modal with live JavaScript code preview, 1-click clipboard copy, and dynamic runtime registration.
 
 ---
 
@@ -81,6 +92,11 @@ Personalize every aesthetic detail of your cube in real-time:
 
 ### 6. 🧩 3D Physical Cube Rebuilder & Painter
 Reconstruct a real physical cube you hold in your hands directly into the 3D simulator:
+- **Shape-Mod 3D Geometry Support**:
+  - **Fisher Cube**: Accurate 45° triangular corners and pentagonal edge-corner cuts with raycastable sticker geometry.
+  - **Mirror Cube**: Realistic asymmetric slab heights on all 3 axes.
+  - **Mixup Cube**: Oskar 45° spherical core proportions and wide center slabs.
+  - **Cuboids (3×3×4, 2×2×3, etc.)**: Dynamic rectangular face grids with accurate dimension scaling ($N_x \times N_y \times N_z$).
 - **Interactive 3D Painter**:
   - Orbit around the 3D cube model and click any sticker to paint with the active color brush.
   - Hover reticle illuminates the target facelet with a cyan boundary box before painting.
@@ -89,9 +105,9 @@ Reconstruct a real physical cube you hold in your hands directly into the 3D sim
 - **View Modes**:
   - `🧊 3D Painter`: Full-width 3D interactive painter stage.
   - `◫ Side-by-Side`: Split view showing the 3D model alongside the unfolded 2D net with live bi-directional sync.
-  - `🗺️ 2D Net`: Classic unfolded cross net.
+  - `🗺️ 2D Net`: Classic unfolded cross net with dynamic rectangular grids for cuboids.
 - **Color Brush Palette**: White, Yellow, Green, Blue, Red, Orange with live count badges (e.g. `9/9`).
-- **Live Validation Banner**: Instant mathematical integrity check confirming exactly $N \times N$ facelets per color before solving.
+- **Live Validation Banner**: Instant mathematical integrity check confirming balanced facelets per color before solving.
 - **Quick Actions**:
   - `📥 Read Simulator`: Pulls the current 3D cube state into the painter.
   - `🔄 Solved Cube`: Resets to a clean solved cube pattern.
@@ -107,6 +123,10 @@ Calculate God's Algorithm-level solutions that solve the cube in the least numbe
   - Bundles a high-performance, zero-dependency JavaScript implementation of Herbert Kociemba's Two-Phase algorithm (`kociemba.js`).
   - Solves any valid 3×3 scramble in **under 22 moves** (often 18–21 moves), compared to 55–65 moves with standard CFOP (~65% move reduction!).
   - Automatic center color normalization: solves correctly regardless of custom color schemes or physical cube orientation.
+- **Special Cubes & Shape Mods Supported**:
+  - **🐟 Fisher Cube & 🪞 Mirror Cube**: Facelet coordinates mapped to the Two-Phase solver, providing sub-22 move optimal solutions directly from scrambled states.
+  - **🔀 Mixup Cube**: 45° commutator inverse reduction engine that simplifies and cancels opposite slice moves, restoring solved state with 100% mathematical guarantee.
+  - **🧱 3×3×4 & Custom Cuboids**: Layer-by-layer commutator reduction.
 - **Optimal 2×2 Solver**: Fast breadth-first search (BFS) generating exact optimal solutions in 4–11 moves.
 - **Instant Solve Modal**:
   - **Performance Metrics**: Live badge indicators for optimal move count, calculation time in milliseconds, and algorithm method.
@@ -201,7 +221,8 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 rubiks-simulator/
 ├── index.html       # Main layout, 3D painter workspace, Instant Solve modal, HUD
 ├── style.css        # Glassmorphic dark UI, 3D painter canvas, Instant Solve badges & chips
-├── cube.js          # Three.js 3D engine: standard, Fisher, Mirror, and Mixup geometry
+├── puzzles.js       # Extensible Puzzle Registry & custom cube builder API (definePuzzle)
+├── cube.js          # Three.js 3D engine: standard, cuboids (3x3x4), Fisher, Mirror, and Mixup geometry
 ├── notation.js      # WCA notation parser, 45° slice support, and scrambler
 ├── kociemba.js      # Pure JS implementation of Kociemba's Two-Phase optimal algorithm
 ├── solver.js        # OptimalSolver (Kociemba & BFS), LBL/CFOP guide, VirtualCube model

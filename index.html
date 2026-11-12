@@ -32,9 +32,11 @@
         <button class="size-btn" data-type="cube2" data-size="2">2×2</button>
         <button class="size-btn active" data-type="cube3" data-size="3">3×3</button>
         <button class="size-btn" data-type="cube4" data-size="4">4×4</button>
+        <button class="size-btn special" data-type="cube3x3x4" data-size="4" title="3×3×4 Articulated Cuboid">3×3×4</button>
         <button class="size-btn special" data-type="fisher" data-size="3" title="Tony Fisher's 45° Shape-Mod Cube">🐟 Fisher</button>
         <button class="size-btn special" data-type="mirror" data-size="3" title="Mirror / Bump Cube (Asymmetric Brushed Metallic)">🪞 Mirror</button>
         <button class="size-btn special" data-type="mixup" data-size="3" title="WitEden & Oskar Mixup 3x3 (45° Slices & Edge-Center Swaps)">🔀 Mixup</button>
+        <button id="btn-open-custom-builder" class="size-btn special highlight-builder" title="Custom Cube Builder: Build 3x3x4, 2x2x3, or custom dimensions">➕ Custom</button>
       </div>
 
       <!-- Action Buttons -->
@@ -936,7 +938,90 @@
     </div>
   </div>
 
+  <!-- Modal: Custom Cube Builder Studio -->
+  <div id="modal-custom-cube" class="modal-overlay hidden">
+    <div class="modal-card custom-cube-card">
+      <div class="modal-header">
+        <div class="custom-cube-title-group">
+          <h3 class="modal-title">🛠️ Custom Cube Builder</h3>
+          <span class="custom-cube-subtitle">Create any custom cube or cuboid with custom dimensions (e.g. 3×3×4, 2×2×3, 3×3×5, etc.)</span>
+        </div>
+        <button id="btn-close-custom-builder" class="btn-close-modal">&times;</button>
+      </div>
+
+      <div class="custom-cube-body">
+        <!-- Preset Quick Pickers -->
+        <div class="custom-section">
+          <label class="custom-label">Quick Presets:</label>
+          <div class="preset-cuboid-row">
+            <button class="btn-cuboid-preset active" data-x="3" data-y="4" data-z="3" data-name="3×3×4 Cuboid">3×3×4 Cuboid</button>
+            <button class="btn-cuboid-preset" data-x="2" data-y="3" data-z="2" data-name="2×2×3 Tower">2×2×3 Tower</button>
+            <button class="btn-cuboid-preset" data-x="3" data-y="2" data-z="3" data-name="3×3×2 Domino">3×3×2 Domino</button>
+            <button class="btn-cuboid-preset" data-x="3" data-y="5" data-z="3" data-name="3×3×5 Cuboid">3×3×5 Cuboid</button>
+            <button class="btn-cuboid-preset" data-x="2" data-y="2" data-z="4" data-name="2×2×4 Tower">2×2×4 Tower</button>
+          </div>
+        </div>
+
+        <!-- Dimension Inputs -->
+        <div class="custom-section">
+          <label class="custom-label">Dimensions (Width × Height × Depth):</label>
+          <div class="dim-inputs-row">
+            <div class="dim-field">
+              <span class="dim-tag">Width (X)</span>
+              <input id="custom-dim-x" type="number" min="1" max="8" value="3" class="dim-input">
+            </div>
+            <span class="dim-mult">×</span>
+            <div class="dim-field">
+              <span class="dim-tag">Height (Y)</span>
+              <input id="custom-dim-y" type="number" min="1" max="8" value="4" class="dim-input">
+            </div>
+            <span class="dim-mult">×</span>
+            <div class="dim-field">
+              <span class="dim-tag">Depth (Z)</span>
+              <input id="custom-dim-z" type="number" min="1" max="8" value="3" class="dim-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- Name and ID -->
+        <div class="custom-section">
+          <div class="custom-row-inputs">
+            <div class="custom-input-group flex-2">
+              <label class="custom-label" for="custom-cube-name">Puzzle Display Name:</label>
+              <input id="custom-cube-name" type="text" value="3×3×4 Cuboid" class="custom-text-input">
+            </div>
+            <div class="custom-input-group flex-1">
+              <label class="custom-label" for="custom-cube-id">System ID:</label>
+              <input id="custom-cube-id" type="text" value="cube3x3x4" class="custom-text-input" readonly>
+            </div>
+          </div>
+        </div>
+
+        <!-- Generated JavaScript Code Preview -->
+        <div class="custom-section">
+          <div class="custom-code-header">
+            <label class="custom-label">Easy JavaScript Code (Define in code):</label>
+            <button id="btn-copy-cube-code" class="btn-copy-code" title="Copy JavaScript code">📋 Copy Code</button>
+          </div>
+          <pre id="custom-code-preview" class="custom-code-preview"><code>definePuzzle({
+  id: 'cube3x3x4',
+  name: '3×3×4 Cuboid',
+  dimensions: [3, 4, 3],
+  category: 'Cuboid'
+});</code></pre>
+        </div>
+      </div>
+
+      <div class="custom-cube-footer">
+        <button id="btn-create-custom-cube" class="btn-save-confirm highlight-gold" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+          🚀 Build & Play Puzzle
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Core Scripts -->
+  <script src="puzzles.js"></script>
   <script src="notation.js"></script>
   <script src="kociemba.js"></script>
   <script src="solver.js"></script>
